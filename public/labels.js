@@ -1,0 +1,1 @@
+window.ZaryobI18n = { t: text => ({ 'Copy': 'Kopyala', 'Copy code': 'Kodu kopyala', 'Copied': 'Kopyalandı', 'Select code to copy': 'Kodu seçerek kopyala', 'Open menu': 'Menüyü aç', 'Close menu': 'Menüyü kapat' })[text] || text, apply() {} };

@@ -1,0 +1,33 @@
+{
+  "name": "execmap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A source-backed study of Linux ELF loading, binary analysis, and runtime observation",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check public/app.js && node --check public/search.mjs && npm run build && npm test",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "highlight.js": "11.11.1",
+    "marked": "15.0.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "linkedom": "0.18.12"
+  },
+  "license": "GPL-3.0-or-later",
+  "author": "Suleyman Poyraz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zaryob/execmap.git"
+  },
+  "homepage": "https://zaryob.github.io/execmap/"
+}
