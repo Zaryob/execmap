@@ -52,6 +52,10 @@ The site was subsequently translated to English, including prose, comments, diag
 
 After translation, both URL layouts passed all 14 content/interaction checks. The browser suite passed 13 tests with one intentional duplicate-geometry skip, including checks that a saved Turkish preference and `?lang=tr` do not change English content or controls. All 29 published HTML pages were checked at 320, 390, and 1440 pixels without document overflow or non-English language attributes. Screenshots are in `output/playwright/english-*.png`. The parser check passed 29 malformed/valid ELF fixtures with ASan/UBSan and four portable example runs; each branch build passed 2001 valid integers and nine invalid argument cases. The LIEF/pyelftools checks also passed. Comparing C tokens after removing comments and string literals found no changes to program logic. Native Linux/GDB execution remains subject to the environment limitation above.
 
-## 5. Attribution and provenance
+## 5. Native Linux CI correction
+
+Post-push Linux validation found that GCC 15.2 eliminates `main`'s initial zero store at `-O2`: the pointed-to object is overwritten before any read. The first three GDB sessions passed, but the optimized session incorrectly required the removed intermediate value. Its entry check now verifies the ABI input; the final pointer store and return-value assertions remain mandatory. The `-O0` watchpoint still checks the actual zero-to-seven transition. This distinction is also documented in the laboratory. Remote rerun evidence is recorded with the push verification results.
+
+## 6. Attribution and provenance
 
 The upstream root [LICENSE](https://github.com/mytechnotalent/Reverse-Engineering/blob/f6893dfdaaa563bc7f98bf5093a2e138efbc87e9/LICENSE) is Apache-2.0. No upstream prose, code, artwork, PDF, or binary was copied. Links and attribution acknowledge topic selection and study sequence; original execmap text/code follows the existing project license. The root license is not assumed to cover every linked repository or book. Any future direct import requires checking that work's own license and notices.

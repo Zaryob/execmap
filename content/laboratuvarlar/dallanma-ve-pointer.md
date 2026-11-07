@@ -114,6 +114,8 @@ At the breakpoint, expect `x=-7` and `*target=0`. When the watchpoint detects th
 
 For the optimized binary, use a fresh session with `start -7`, `break *sec_ve_yaz`, and `continue` to stop at its first instruction. Read arguments through `(int)$esi` and `(int *)$rdi`, and save the pointer. Do not treat post-prologue registers as unchanged entry arguments. `<optimized out>` does not mean the input or store never existed; [optimized-code debugging limits](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Optimized-Code.html) apply.
 
+Do not require the pointed-to memory to contain zero at optimized function entry. The initial `hedef = 0` store in `main` is overwritten without being read, so [GCC dead-store elimination](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-ftree-dse) may remove it even with `-fno-inline`. The zero-to-seven watchpoint exercise above uses `-O0`. For `-O2`, validate the input argument, then the final stored value and return value; debugger-visible intermediate memory need not reproduce every source assignment.
+
 ## 5. Check equivalence within a defined domain
 
 Three matching examples do not establish equality for every input. Execute all 2001 accepted integer values in both builds and compare them against the expected mathematical result too:

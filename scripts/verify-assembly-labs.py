@@ -159,7 +159,10 @@ def verify(report, require_linux):
                  'set disable-randomization off\nstart -7\n'
                  'break *sec_ve_yaz\ncontinue\n'
                  'set $hedef_adresi = (int *)$rdi\n')
-    optimized += gdb_assert('(int)$esi == -7 && *$hedef_adresi == 0')
+    # The initial zero in main is a dead store: this callee overwrites the
+    # target before reading it. GCC may remove it at -O2 even without inlining.
+    # Check the entry argument and the observable final store/return instead.
+    optimized += gdb_assert('(int)$esi == -7')
     optimized += 'disassemble /r sec_ve_yaz\nfinish\n'
     optimized += gdb_assert('(int)$eax == 7 && *$hedef_adresi == 7')
     optimized += 'continue\nquit\n'
