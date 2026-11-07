@@ -42,7 +42,7 @@ Inspect core metadata with `readelf -n`:
 readelf -n ./core
 ```
 
-GNU binutils `readelf -n` shows note owners, types, and sizes; do not expect it to provide a detailed `NT_PRSTATUS` register dump. In a core without sections, note locations are reported as file offsets. `eu-readelf -n` from elfutils can decode more detail; use the GDB commands below for registers. No Linux core was generated and measured during this revision; outputs from different tools are not presented as one combined example.
+GNU binutils `readelf -n` shows note owners, types, and sizes; do not expect it to provide a detailed `NT_PRSTATUS` register dump. In a core without sections, note locations are reported as file offsets. `eu-readelf -n` from elfutils can decode more detail; use the GDB commands below for registers. Linux aarch64 validation on November 7, 2026 produced both a kernel crash core and a GDB snapshot. GDB read the snapshot backtrace, registers, and mappings; an anonymous marker was readable while a `MADV_DONTDUMP` marker was inaccessible. Outputs from different tools remain separate.
 
 ## 2. Postmortem analysis with GDB
 
@@ -61,8 +61,8 @@ Useful forensic commands in the GDB session include:
 # 2. List processor registers
 (gdb) info registers
 
-# 3. Disassemble around the instruction at the crash
-(gdb) x/10i $rip - 15
+# 3. Disassemble from the current instruction (portable GDB PC alias)
+(gdb) x/10i $pc
 
 # 4. Display process mappings (files and anonymous memory)
 (gdb) info proc mappings

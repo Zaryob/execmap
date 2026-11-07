@@ -55,7 +55,7 @@ int main(void) {
 }
 ```
 
-Compile with `cc -Wall -Wextra -Werror tracer.c -o tracer`. A tracer visible in the current PID namespace should produce a nonzero PID and exit 1; no visible tracer should produce 0 and exit 0. A read failure exits 2. Namespace restrictions and observation methods outside ptrace mean that 0 does not establish that the program is unobserved. Linux execution was not performed during this revision.
+Compile with `cc -Wall -Wextra -Werror tracer.c -o tracer`. A tracer visible in the current PID namespace should produce a nonzero PID and exit 1; no visible tracer should produce 0 and exit 0. A read failure exits 2. Namespace restrictions and observation methods outside ptrace mean that 0 does not establish that the program is unobserved. Linux aarch64 validation on November 7, 2026 confirmed exit 0 without a tracer and exit 1 under GDB. A separate parent/child control observed the parent PID after successful TRACEME and `EPERM` on a repeated TRACEME call.
 
 ## 2. Direct system calls
 

@@ -86,6 +86,34 @@ Pass `--fq /absolute/path/to/fq` to check the published fq inventory command
 segment are checked; it is not executed. Linux tracing, GOT interposition, core,
 and checkpoint/restore experiments still require a suitable Linux environment.
 
+Native Linux/glibc acceptance is separate from the website checks:
+
+```sh
+python3 scripts/verify-linux-labs.py
+python3 scripts/verify-packed-oep.py --upx /absolute/path/to/upx
+```
+
+The first command extracts published C blocks and records RW→RX mappings,
+interposition/`-Bsymbolic`, `LD_DEBUG`, debuglink/Build-ID matching, linker maps,
+TRACEME, memfd/fexecve/execveat, and core controls. The second creates a known
+static ELF fixture, packs it, and compares its original entry bytes with a live
+hardware-breakpoint observation. Use a trusted, explicitly selected UPX build
+and an empty output directory. See the [Linux experiment record](docs/linux-deney-kaydi.md)
+for actual versions, bounded results, and remaining BPF/PT/restore prerequisites.
+
+## Search and language contract
+
+The project registry retains stable `/execmap/` paths and the six-laboratory
+catalog. Registry display names use `title_en` when available. Both generated
+search indexes contain 24 reading pages, including the assembly guide and two
+GDB laboratories. The suite adapter `search.json` publishes `type: "execmap/"`,
+`lang: "en"`, full text, and links using the selected build prefix. Consumers
+should preserve that content-language field. The local `search-index.json`
+also carries code and heading fields for ranking phrase and code queries.
+There is no Turkish content variant or language selector; saved language
+preferences and `?lang=tr` leave the English product intact. Shared-suite
+consumer changes and canonical asset synchronization are maintained separately.
+
 ## Repository layout
 
 - `content/rehberler/` — technical guides and per-topic references.

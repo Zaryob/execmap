@@ -71,7 +71,7 @@ Inspect the result:
 readelf -x .gnu_debuglink hesap
 ```
 
-The `.gnu_debuglink` layout is a NUL-terminated filename, 0–3 padding bytes to the next four-byte boundary, then a CRC-32 in the target ELF's byte order. `hesap.debug\0` occupies 12 bytes, so the CRC starts at `0x0c`, not `0x10`. Its value depends on the actual debug file; no GNU objcopy dump was measured during this revision. Once GDB finds the file through its name/path search, it checks the CRC too.
+The `.gnu_debuglink` layout is a NUL-terminated filename, 0–3 padding bytes to the next four-byte boundary, then a CRC-32 in the target ELF's byte order. `hesap.debug\0` occupies 12 bytes, so the CRC starts at `0x0c`, not `0x10`. Its value depends on the actual debug file. Linux aarch64 validation on November 7, 2026 recorded the GNU objcopy/readelf output and GDB source-line lookup. An altered debug file was rejected for CRC mismatch; Build-ID lookup was tested separately, including rejection of a different embedded identity. Once GDB finds the file through its name/path search, it checks the CRC too.
 
 ## 4. Verify automatic matching with GDB
 

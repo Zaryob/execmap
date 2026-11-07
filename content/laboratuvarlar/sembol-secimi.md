@@ -103,12 +103,12 @@ LD_DEBUG=symbols,bindings LD_PRELOAD=./libb.so ./ana >ana.stdout 2>ana.ld-debug
 grep -E 'symbol=secim|binding file.*secim' ana.ld-debug
 ```
 
-No Linux linker log was measured during this revision. Compare `secim` lookup lines with the binding of the `ana` reference to the `libb.so` definition in your recording. PID, paths, and version formatting may differ. `symbols` reports lookup and `bindings` reports binding; `grep "symbol=secim"` alone does not show the binding line. Do not assume every remaining library in scope is searched after a definition is found.
+Linux/glibc validation on November 7, 2026 recorded both lookup and binding lines and confirmed results 11 normally and 22 with preload. Compare `secim` lookup lines with the binding of the `ana` reference to the `libb.so` definition in your recording. PID, paths, and version formatting may differ. `symbols` reports lookup and `bindings` reports binding; `grep "symbol=secim"` alone does not show the binding line. Do not assume every remaining library in scope is searched after a definition is found.
 
 ## 5. AT_SECURE and -Bsymbolic limits
 
 1. **AT_SECURE**: A setuid bit alone does not guarantee secure execution on every run. In this mode, glibc restricts preload paths, ignoring those containing slashes, with a narrow exception for setuid objects in standard directories. See [startup and auxv](../rehberler/baslangic-ve-auxv.md). This laboratory does not change privileges.
-2. **`-Bsymbolic`**: Binds a shared object's internal references to its own global definitions where available. The call **from the main program**, `ana → secim`, is outside that scope. Even if `liba.so` is rebuilt with the option, the expected result of `LD_PRELOAD=./libb.so ./ana` here remains 22. To test internal references, add another function in `liba` that calls `secim` ([GNU ld](https://sourceware.org/binutils/docs/ld/Options.html)).
+2. **`-Bsymbolic`**: Binds a shared object's internal references to its own global definitions where available. The call **from the main program**, `ana → secim`, is outside that scope. Even if `liba.so` is rebuilt with the option, the expected result of `LD_PRELOAD=./libb.so ./ana` here remains 22. An additional Linux/glibc fixture calling `secim` from inside `liba` produced 22 with default linking and 11 with `-Bsymbolic`; the main-program call still produced 22. To reproduce the internal-reference control, add another function in `liba` that calls `secim` ([GNU ld](https://sourceware.org/binutils/docs/ld/Options.html)).
 
 ## Investigate further
 

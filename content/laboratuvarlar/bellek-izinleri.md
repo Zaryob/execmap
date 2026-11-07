@@ -62,7 +62,7 @@ gcc -Wall -Wextra -O0 -g izin.c -o izin
 strace -e trace=mmap,mprotect,munmap ./izin
 ```
 
-A schematic strace excerpt, not measured on Linux during this revision. Use your own page size, PID, and addresses:
+The published C source was run on Linux 6.12.76 aarch64 with glibc 2.36 on November 7, 2026: strace and procfs both confirmed RW → RX. An additional unaligned-address control returned `EINVAL`. The excerpt below remains schematic; use your own page size, PID, and addresses:
 
 ```text
 mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7fa289c00000

@@ -96,7 +96,7 @@ The generated `cikis.map` shows:
 2. Discarded input sections, including functions removed by `--gc-sections`.
 3. Padding and alignment bytes between sections.
 
-No link map was measured during this revision. Inspect `Discarded input sections`, `.text.*`, and `*fill*` in your actual `cikis.map`. Do not assume the same elimination without `--gc-sections`, or that every discarded entry is attributable only to that option. Record alignment and addresses with compiler/linker versions.
+Linux aarch64/GNU ld 2.40 validation on November 7, 2026 used an extra two-file fixture: the unused function appeared in discarded input sections and disappeared from `nm` with GC; without GC it remained. The published boundary-symbol example also compiled and ran. Inspect `Discarded input sections`, `.text.*`, and `*fill*` in your actual `cikis.map`. Do not assume the same elimination without `--gc-sections`, or that every discarded entry is attributable only to that option. Record alignment and addresses with compiler/linker versions.
 
 ## 5. Symbols defined by the linker
 

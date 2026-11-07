@@ -71,7 +71,7 @@ int run_from_memory(const unsigned char *elf_bytes, size_t size, char **argv, ch
 }
 ```
 
-This Linux/glibc function fragment expects ELF bytes and valid `argv`/`envp`. It was not compiled or executed on Linux during this revision. [fexecve(3)](https://man7.org/linux/man-pages/man3/fexecve.3.html) documents glibc 2.27+ using `execveat` on a suitable kernel. A memfd name may appear in mappings or `/proc/<pid>/fd` while the descriptor is open. Successful exec closes an `MFD_CLOEXEC` descriptor, so do not assume its fd-list entry remains. For script files, CLOEXEC can also cause `ENOENT`. Memory backing does not guarantee an absence of disk artifacts: consider swap and execution policies.
+This Linux/glibc function fragment expects ELF bytes and valid `argv`/`envp`. Linux aarch64/glibc 2.36 validation on November 7, 2026 compiled this fragment with a separate file-reading harness. strace confirmed successful `execveat` with `AT_EMPTY_PATH`; the payload retained the PID, received argv/envp, and had no open `memory_module` descriptor. Controls covered a CLOEXEC script (`ENOENT`), an empty image (`ENOEXEC`), EINTR/short-write recovery, and a zero write (`EIO`). [fexecve(3)](https://man7.org/linux/man-pages/man3/fexecve.3.html) documents glibc 2.27+ using `execveat` on a suitable kernel. A memfd name may appear in mappings or `/proc/<pid>/fd` while the descriptor is open. Successful exec closes an `MFD_CLOEXEC` descriptor, so do not assume its fd-list entry remains. For script files, CLOEXEC can also cause `ENOENT`. Memory backing does not guarantee an absence of disk artifacts: consider swap and execution policies.
 
 ## 3. Loading ELF in user space
 

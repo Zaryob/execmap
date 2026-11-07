@@ -107,3 +107,8 @@ Read [core dumps and snapshots](core-ve-snapshot.md) to analyze memory dumps and
 - [UPX Recovery Tool — Nozomi Networks (GitHub)](https://github.com/NozomiNetworks/upx-recovery-tool)
 - [Ghidra — official project and documentation](https://github.com/NationalSecurityAgency/ghidra)
 - [UPX source code](https://github.com/upx/upx)
+
+
+## Bounded OEP validation
+
+On November 8, 2026, a known static AArch64 ET_EXEC fixture was packed with UPX 5.3.0 and run on Linux 6.12.76. In a live GDB inferior, a hardware breakpoint at the original ELF entry (`0x400580`) was reached from the packed stub entry (`0x4dcdc4`). The first 32 bytes matched the original file, normal execution reached `main`, and UPX decompression reproduced the original SHA-256. This comparison uses a known original; it is not an automatic OEP-discovery method. It does not validate the x86-64 syscall-register procedure above, Intel PT, or arbitrary packers.
