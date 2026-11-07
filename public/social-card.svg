@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#17191a"/>
+  <g fill="none" stroke="#33383a"><path d="M64 112H1136M64 514H1136"/><rect x="790" y="184" width="346" height="252" rx="8"/></g>
+  <g font-family="monospace" fill="#eeeee7">
+    <text x="64" y="75" font-size="23" fill="#a3b6aa">zaryob : ~/execmap $</text>
+    <text x="60" y="257" font-size="90" font-weight="bold">execmap</text>
+    <text x="64" y="326" font-size="28">Linux reverse engineering desk</text>
+    <text x="64" y="401" font-size="22" fill="#b9c0ba">Read the file. Observe runtime.</text>
+    <text x="64" y="436" font-size="22" fill="#b9c0ba">Verify the finding.</text>
+    <text x="820" y="237" font-size="22" fill="#a3b6aa">$ readelf -lW ./a.out</text>
+    <text x="820" y="300" font-size="23">ELF → LOAD → memory</text>
+    <text x="820" y="351" font-size="21" fill="#b9c0ba">file     runtime</text>
+    <text x="820" y="396" font-size="21" fill="#a3b6aa">RW       RX</text>
+    <text x="64" y="568" font-size="21" fill="#a3b6aa">ELF / assembly / GDB / runtime observation</text>
+  </g>
+</svg>

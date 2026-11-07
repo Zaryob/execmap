@@ -47,7 +47,7 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
     const address = new URL(page.url, globalThis.location?.origin || 'https://zaryob.github.io');
     const origin = globalThis.location?.origin || 'https://zaryob.github.io';
     if (address.origin !== origin || !['http:', 'https:'].includes(address.protocol)) return;
-    if (query) address.searchParams.set('highlight', query);
+    if (query) address.searchParams.set('highlight', query.replace(/"([^"]+)"/g, '$1'));
     link.href = `${address.pathname}${address.search}${address.hash}`;
     const label = doc.createElement('small');
     label.className = 'result-kind';

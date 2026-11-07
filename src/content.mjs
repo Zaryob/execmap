@@ -24,9 +24,19 @@ export function plainText(markdown) {
     if (token.type === 'table') return [...token.header, ...token.rows.flat()].map(cell => collect(cell.tokens)).join(' ');
     if (token.items) return collect(token.items);
     if (token.tokens) return collect(token.tokens);
-    return token.text || '';
+    return (token.text || '').replace(/^\[!(NOTE|WARNING)\]\s*/, '');
   }).join(' ');
   return collect(Lexer.lex(markdown)).replace(/\s+/g, ' ').trim();
+}
+
+export function descriptionText(text, length = 155) {
+  const clean = String(text).replace(/\s+/g, ' ').trim();
+  if (clean.length <= length) return clean;
+  const boundary = clean.lastIndexOf(' ', length - 1);
+  // Keep an unusually long identifier intact rather than split it.
+  const nextSpace = clean.indexOf(' ', length);
+  const end = boundary > 0 ? boundary : (nextSpace < 0 ? clean.length : nextSpace);
+  return clean.slice(0, end).trimEnd() + (end < clean.length ? '…' : '');
 }
 
 export async function loadPages(root) {
@@ -41,9 +51,20 @@ export async function loadPages(root) {
     const slug = id.split('/').at(-1);
     const parsed = parseContent(await readFile(file, 'utf8'));
     const text = plainText(parsed.markdown);
+    const code = [];
+    const headings = [];
+    const collectFields = tokens => {
+      for (const token of tokens) {
+        if (token.type === 'code') code.push(token.text);
+        if (token.type === 'heading') headings.push(plainText(token.text));
+        if (token.tokens) collectFields(token.tokens);
+        if (token.items) collectFields(token.items);
+      }
+    };
+    collectFields(Lexer.lex(parsed.markdown));
     const group = sections.find(section => section.pages.includes(slug));
     const kind = id.startsWith('laboratuvarlar/') ? 'laboratuvar' : id.startsWith('rehberler/') ? 'rehber' : 'sayfa';
-    return { ...parsed, id, slug, text, kind, group: group?.key || kind, section: group?.name || (kind === 'laboratuvar' ? 'Labs' : 'Reference'), description: summaries[slug] || parsed.description || text.replace(parsed.title, '').trim().slice(0, 155), minutes: Math.max(2, Math.ceil(text.split(/\s+/).length / 190)), order: group ? sections.indexOf(group) * 100 + group.pages.indexOf(slug) : labOrder.indexOf(slug) };
+    return { ...parsed, id, slug, text, code: code.join(' '), headings: headings.join(' '), kind, group: group?.key || kind, section: group?.name || (kind === 'laboratuvar' ? 'Labs' : 'Reference'), description: descriptionText(summaries[slug] || parsed.description || text.replace(parsed.title, '').trim()), minutes: Math.max(2, Math.ceil(text.split(/\s+/).length / 190)), order: group ? sections.indexOf(group) * 100 + group.pages.indexOf(slug) : labOrder.indexOf(slug) };
   }));
 }
 export function normalizeBase(value = '/execmap') {

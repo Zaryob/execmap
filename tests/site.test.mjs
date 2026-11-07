@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, access } from 'node:fs/promises';
 import path from 'node:path';
 import { parseHTML } from 'linkedom';
-import { loadPages, normalizeBase, pageUrl, rewriteLink, slugify, plainText } from '../src/content.mjs';
-import { searchPages, normalize } from '../public/search.mjs';
+import { loadPages, normalizeBase, pageUrl, rewriteLink, slugify, plainText, descriptionText } from '../src/content.mjs';
+import { searchPages, normalize, excerpt } from '../public/search.mjs';
 
 const root = path.resolve('_site');
 const { document: homeDocument } = parseHTML(await readFile(path.join(root, 'index.html'), 'utf8'));
@@ -28,6 +28,13 @@ test('all content is published with one title, a main landmark and navigation', 
     assert.ok(document.querySelector('#console-navigation'), file);
     assert.ok(document.querySelector('title').textContent.includes('execmap'), file);
     assert.ok(document.querySelector('meta[name="description"]').content.length > 20, file);
+    const canonical = document.querySelector('link[rel="canonical"]').href;
+    assert.equal(document.querySelector('meta[property="og:url"]').content, canonical, file);
+    const image = document.querySelector('meta[property="og:image"]').content;
+    assert.equal(image, `https://zaryob.github.io${base}/social-card.png`, file);
+    assert.equal(document.querySelector('meta[name="twitter:image"]').content, image, file);
+    assert.equal(document.querySelector('meta[name="twitter:card"]').content, 'summary_large_image', file);
+    await access(path.join(root, 'social-card.png'));
     const ids = [...document.querySelectorAll('[id]')].map(node => node.id);
     assert.equal(new Set(ids).size, ids.length, `Duplicate IDs: ${file}`);
   }
@@ -93,6 +100,44 @@ test('search handles English case, diacritics, multiple terms and title ranking'
   assert.deepEqual(searchPages(fixture, 'RUNTIME TRACE').map(page => page.title), ['Runtime trace', 'Another topic']);
   assert.equal(searchPages(fixture, '').length, 0);
   assert.equal(searchPages(fixture, 'INLINING')[0].title, 'Inlining pointers');
+});
+
+test('real phrase and code queries rank their focused explanation first', () => {
+  for (const [query, slug] of [
+    ['mprotect', 'bellek-izinleri'], ['p_offset', 'elf-parser-ve-adresler'],
+    ['Build-ID', 'debug-bilgisi'], ['symbol selection', 'sembol-secimi'],
+    ['"memory permission"', 'bellek-izinleri'], ['PROT_READ | PROT_EXEC', 'bellek-izinleri'],
+    ['GOT PLT', 'dinamik-baglama'],
+  ]) assert.ok(searchPages(index, query)[0]?.url.endsWith(`/${slug}.html`), query);
+  assert.equal(searchPages(index, '"nonexistent exact phrase"').length, 0);
+  const scattered = [{ title: 'memory', text: 'permission' }];
+  assert.equal(searchPages(scattered, '"memory permission"').length, 0);
+});
+
+test('summaries and search excerpts preserve complete words and code identifiers', () => {
+  assert.equal(descriptionText('One complete word boundary', 15), 'One complete…');
+  assert.equal(descriptionText('p_offset', 4), 'p_offset');
+  const text = 'Earlier context before a long identifier PROT_EXEC followed by several complete words after it.';
+  const fragment = excerpt(text, '"PROT_EXEC"', 35);
+  assert.ok(fragment.includes('PROT_EXEC'));
+  assert.ok(!fragment.includes('PROT_EX…'));
+  assert.ok(!fragment.includes('identifi…'));
+});
+
+test('notices render as labelled content and breadcrumbs describe the current page', async () => {
+  for (const id of ['laboratuvarlar/bellek-izinleri', 'rehberler/stripped-elf', 'rehberler/elf-dosyadan-bellege', 'kaynak-kutuphanesi', 'okuma-rotalari']) {
+    const { document } = parseHTML(await readFile(path.join(root, `${id}.html`), 'utf8'));
+    const page = pages.find(page => page.id === id);
+    assert.equal(document.querySelector('.breadcrumbs [aria-current="page"]').textContent, page.title);
+    const links = [...document.querySelectorAll('.breadcrumbs a')].map(link => link.getAttribute('href'));
+    assert.ok(!links.includes(`${base}/${id}.html`), id);
+    if (id.includes('/')) {
+      assert.ok(document.querySelector('.admonition[aria-label]'), id);
+      assert.ok(!document.querySelector('.prose').textContent.match(/\[!(NOTE|WARNING)\]/), id);
+    }
+    assert.ok(!document.querySelector('.mobile-toc details').hasAttribute('open'), id);
+    assert.ok(document.querySelector('.reading-toc details').hasAttribute('open'), id);
+  }
 });
 
 test('project and root URL generation preserves links and rejects unsafe schemes', () => {

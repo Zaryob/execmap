@@ -220,3 +220,10 @@
   .console-header,.console-footer,.reading-sidebar,.reading-toc,.mobile-toc,.page-neighbors,.console-copy,.heading-anchor,.article-meta a { display: none !important; }
   .reading-layout { display: block; }.reading-main { padding: 0; }.prose pre { white-space: pre-wrap; overflow-wrap: anywhere; }.console-site { --paper: white; --ink: black; --muted: #444; --line: #ccc; }
 }
+
+/* Build-rendered Markdown notices: labels remain visible without color. */
+.prose .admonition { border-left: 3px solid var(--accent); background: var(--surface); padding: 14px 18px; margin: 24px 0; }
+.prose .admonition-warning { border-left-color: var(--danger); }
+.prose .admonition-title { font-weight: 600; margin: 0 0 8px; }
+.prose .admonition > :last-child { margin-bottom: 0; }
+.mobile-toc .toc-details:not([open]) summary { padding-bottom: 0; }
