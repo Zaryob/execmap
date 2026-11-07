@@ -1,18 +1,18 @@
 # execmap
 
-A source-backed study of Linux ELF loading, binary analysis, and runtime observation, published as a Turkish technical reference with practical C laboratories.
+A source-backed study of Linux ELF loading, binary analysis, and runtime observation, published as an English technical reference with practical C laboratories.
 
 [Read the site](https://zaryob.github.io/execmap/) · [Research method](content/kaynaklar.md) · [Literature and tools](content/kaynak-kutuphanesi.md)
 
 ## Research scope
 
-execmap follows a program from its ELF file layout through linking and process startup to memory mappings and observed execution. Fourteen guides cover three connected areas:
+execmap follows a program from its ELF file layout through linking and process startup to memory mappings and observed execution. Fifteen guides cover three connected areas:
 
 - **ELF and loading:** segments and sections, address translation, parser validation, linker layout, auxiliary vectors, relocations, and symbol resolution.
 - **Binary analysis:** stripped executables, version comparison, user-space loaders, packed code, core files, and process snapshots.
 - **Runtime observation:** perf sampling, Intel PT, eBPF events, observer effects, and interpreting incomplete traces.
 
-Four laboratories examine memory permissions, symbol interposition, separate debug information, and compiler optimization. Each includes source, commands, and expected observations. The technical articles and local search are Turkish; shared interface controls support Turkish and English.
+Six laboratories examine GDB instruction stepping, branches and pointers, memory permissions, symbol interposition, separate debug information, and compiler optimization. Each includes source, commands, and expected observations. A new assembly preparation guide leads into the two GDB laboratories before stripped-binary analysis. Articles, navigation, search, and shared interface controls are English. Existing public URL paths and source identifiers are preserved.
 
 ## Method and literature
 
@@ -51,6 +51,40 @@ SITE_BASEURL='' npm run dev
 `SITE_BASEURL='' npm run check` checks that layout. Set `PORT` to change the local port.
 
 The laboratories require GNU/Linux, a C compiler, GNU binutils, and GDB. Tracing chapters may also require strace, perf, bpftrace, kernel tracing support, suitable privileges, or Intel PT hardware. Their commands describe a Linux environment; building this website does not execute the laboratories.
+
+The assembly additions have a [research and implementation record](docs/assembly-arastirma-plani.md), including source roles, upstream attribution, acceptance criteria, and validation limits. Run their published C examples directly from Markdown:
+
+```sh
+python3 scripts/verify-assembly-labs.py
+# Native Linux x86-64 with GCC, GNU binutils, and GDB; fail if GDB checks cannot run:
+python3 scripts/verify-assembly-labs.py --require-linux-gdb
+```
+
+The check compares both branch-program builds against the expected result for all 2001 accepted integer values, tests invalid inputs, and records commands, source hashes, and results under `output/assembly-validation/`. The Linux mode also checks function-entry ABI values, stepping, debugger intervention, watchpoints, and disassembly. Portable C execution on another platform does not validate Linux register or debugger behavior.
+
+The portable parser check compiles the **C block extracted from the guide** with
+ASan/UBSan, writes real malformed ELF fixtures, and checks rejection results:
+
+```sh
+python3 scripts/verify-examples.py
+```
+
+It also runs the portable arithmetic examples and entropy counterexamples.
+Artifacts and JSON results go to `output/technical-validation/`. This checks
+parser memory access and selected examples, not Linux ELF loadability.
+
+Optional API checks use isolated, pinned Python dependencies:
+
+```sh
+uv run --with lief==0.17.1 --with pyelftools==0.32 python scripts/verify-tool-apis.py
+# Instrument only the helper process created by the check; requires attach permissions:
+uv run --with lief==0.17.1 --with pyelftools==0.32 --with frida==17.5.1 python scripts/verify-tool-apis.py --frida
+```
+
+Pass `--fq /absolute/path/to/fq` to check the published fq inventory command
+(validated with 0.15.1). LIEF output is reparsed and its new entry and executable
+segment are checked; it is not executed. Linux tracing, GOT interposition, core,
+and checkpoint/restore experiments still require a suitable Linux environment.
 
 ## Repository layout
 

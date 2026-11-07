@@ -1,119 +1,113 @@
 ---
-title: "Linker düzenini ve bellek haritasını okumak"
+title: Reading linker layout and memory maps
 ---
 
-# Linker düzenini ve bellek haritasını okumak
+# Reading linker layout and memory maps
 
-Derleme sürecinin son halkası olan bağlayıcı (linker; `GNU ld`, `LLVM lld`, `mold`), derleyicinin ürettiği bağımsız nesne dosyalarını (`.o`) ve kütüphaneleri (`.a`, `.so`) tek bir çalıştırılabilir ELF dosyasında birleştirir.
+The linker (`GNU ld`, `LLVM lld`, or `mold`) completes the build by combining object files (`.o`) and libraries (`.a`, `.so`) into an executable ELF file.
 
-Tersine mühendislik sırasında kaynak kodun fonksiyon sırasıyla disasm çıktısındaki fonksiyon sırasının neden uyuşmadığını, global değişkenlerin bellekte nasıl gruplandığını ve segment sınırlarının neden sayfa boyutuna (4KB / 64KB) hizalandığını anlamak için linker'ın çalışma düzenini (Linker Script ve Map dosyası) bilmek zorunludur.
+Linker scripts and map files explain why function order differs between source and disassembly, how global variables are grouped, and why segment boundaries are aligned to page sizes such as 4 KB or 64 KB.
 
-## 1. Input Section ve Output Section Kavramı
+## 1. Input and output sections
 
-Linker iki temel kavram üzerinden çalışır:
-- **Input Section**: Giriş nesne dosyalarından gelen ham bölümler (örneğin `main.o` içindeki `.text` veya `.rodata.str1.1`).
-- **Output Section**: Nihai ELF dosyasında bir araya getirilen birleşik bölüm (örneğin nihai dosyadaki tek bir devasa `.text` bölümü).
+The linker works with two basic concepts:
+
+- **Input section**: A section from an input object, such as `.text` or `.rodata.str1.1` in `main.o`.
+- **Output section**: A combined section in the final ELF file, such as its `.text` section.
 
 ```text
-Nesne Dosyaları (Inputs)                        Nihai ELF (Output)
-+-------------------------+                     +------------------------+
-| main.o (.text.main)     |-----+               | Segment 1: PT_LOAD (RX)|
-+-------------------------+     |               |                        |
-| helper.o (.text.calc)   |-----+-------------> |   Output: .text        |
-+-------------------------+     |               |   Output: .rodata      |
-| math.o (.text.pow)      |-----+               +------------------------+
-+-------------------------+                     | Segment 2: PT_LOAD (RW)|
-| main.o (.data.counter)  |-----+               |                        |
-+-------------------------+     +-------------> |   Output: .data        |
-| helper.o (.bss.cache)   |                     |   Output: .bss         |
-+-------------------------+                     +------------------------+
+Input object files                         Final ELF
++-------------------------+                +-------------------------+
+| main.o (.text.main)     |---+             | Segment 1: PT_LOAD (RX) |
++-------------------------+   |             |                         |
+| helper.o (.text.calc)   |---+-----------> |   Output: .text         |
++-------------------------+   |             |   Output: .rodata       |
+| math.o (.text.pow)      |---+             +-------------------------+
++-------------------------+                | Segment 2: PT_LOAD (RW) |
+| main.o (.data.counter)  |---+             |                         |
++-------------------------+   +-----------> |   Output: .data         |
+| helper.o (.bss.cache)   |---+             |   Output: .bss          |
++-------------------------+                +-------------------------+
 ```
 
-Derleyiciye `-ffunction-sections` ve `-fdata-sections` bayrakları verildiğinde, her fonksiyon ve veri ayrı bir input section içine konur (`.text.fonksiyon_adi`). Linker, ölü kod eliminasyonu (`--gc-sections`) sırasında referans verilmeyen bölümleri dosyadan tamamen atabilir.
+With `-ffunction-sections` and `-fdata-sections`, the compiler places individual functions and data items into separate input sections, such as `.text.function_name`. During section garbage collection (`--gc-sections`), the linker can discard unreferenced sections.
 
-## 2. VMA ve LMA Farkı
+## 2. VMA versus LMA
 
-Linker terminolojisinde iki kritik adres türü vardır:
-- **VMA (Virtual Memory Address)**: Kodun veya verinin çalışma anında bellekte bulunacağı sanal adres.
-- **LMA (Load Memory Address)**: Segmentin ikili dosya belleğe ilk yüklendiğinde bulunacağı adres.
+Two address types are important:
 
-Standart kullanıcı alanı Linux programlarında VMA ve LMA **birbirine eşittir**. Ancak gömülü sistemlerde, bootloader'larda veya Linux çekirdeğinin kendisinde LMA ve VMA farklıdır: Kod ROM'a veya diske yüklenir (LMA), çalışma anında RAM'e kopyalanır (VMA).
+- **VMA (Virtual Memory Address)**: The address at which code or data resides during execution.
+- **LMA (Load Memory Address)**: Its load address before any runtime copying to the execution location.
 
-## 3. Linker Script Mantığı ve Varsayılan Düzen
+For ordinary Linux user-space programs, VMA and LMA are generally equal in the linker's representation. Embedded systems, bootloaders, and kernel images may use different LMAs and VMAs: data can be stored in ROM and copied into RAM for execution.
 
-Linker'ın hangi input section'ı nereye koyacağını bir metin dosyası olan **Linker Script** belirler. Sistemdeki varsayılan linker script'i görmek için:
+## 3. Linker scripts and the default layout
+
+A **linker script** controls where input sections are placed. Inspect the system's default script with:
 
 ```bash
 ld --verbose
 ```
 
-Basitleştirilmiş bir Linker Script örneği:
+A simplified script:
 
 ```text
 SECTIONS
 {
-  . = 0x400000;              /* Konum sayacını (Location Counter .) ayarla */
+  . = 0x400000;              /* Set the location counter (.) */
 
   .text : {
-    *(.text.entry)           /* Önce giriş fonksiyonunu koy */
-    *(.text*)                /* Tüm nesne dosyalarındaki .text bölümlerini ekle */
+    *(.text.entry)           /* Place the entry function first */
+    *(.text*)                /* Include .text sections from all objects */
   }
 
-  . = ALIGN(0x1000);         /* 4096 baytlık sayfa sınırına hizala */
+  . = ALIGN(0x1000);         /* Align to a 4096-byte page boundary */
 
   .rodata : {
-    *(.rodata*)              /* Salt-okunur sabitler */
+    *(.rodata*)              /* Read-only constants */
   }
 
-  . = ALIGN(0x1000);         /* Veri segmenti için yeni sayfa sınırına geç */
+  . = ALIGN(0x1000);         /* Start a new page for the data segment */
 
   .data : {
-    *(.data*)                /* Başlatılmış global değişkenler */
+    *(.data*)                /* Initialized global variables */
   }
 
   .bss : {
-    *(.bss*)                 /* Sıfırlanmış alanlar */
+    *(.bss*)                 /* Zero-initialized areas */
     *(COMMON)
   }
 }
 ```
 
-Nokta karakteri (`.`) **Location Counter** (Konum Sayacı) olarak adlandırılır. Linker bölümleri yerleştirdikçe bu sayacı otomatik olarak artırır. `ALIGN(0x1000)` direktifi, donanımsal sayfa koruma (Memory Protection Unit / MMU) kurallarını uygulayabilmek için yeni bir 4KB sayfa başlatır.
+The dot (`.`) is the **location counter**. It advances as the linker lays out sections. `ALIGN(0x1000)` aligns the next location to a 4 KB boundary, which is useful when separating page permissions for an MMU or memory protection unit.
 
-## 4. Linker Haritası (Map File) ile İkiliyi Çözümlemek
+## 4. Examining the link map
 
-Bir ikili dosyanın linker düzenini en ince ayrıntısına kadar görmek için derleme sırasında `-Wl,-Map,proje.map` parametresi verilir:
+Pass `-Wl,-Map,proje.map` during the build to inspect the layout in detail:
 
 ```bash
-gcc -O2 -ffunction-sections -fdata-sections -Wl,-Map,cikis.map main.c helper.c -o program
+gcc -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections,-Map,cikis.map main.c helper.c -o program
 ```
 
-Oluşan `cikis.map` dosyası şunları gösterir:
-1. Hangi nesne dosyasının hangi fonksiyonunun hangi sanal adrese yerleştiği.
-2. Ölü kod eliminasyonu (`--gc-sections`) ile hangi fonksiyonların silindiği (`Discarded input sections`).
-3. Bölümler arasındaki boşluklar (padding) ve hizalama baytları.
+The generated `cikis.map` shows:
 
-Örnek Map dosyası kesiti:
+1. Which object files and functions were placed at which virtual addresses.
+2. Discarded input sections, including functions removed by `--gc-sections`.
+3. Padding and alignment bytes between sections.
 
-```text
-.text.main      0x0000000000001149       0x2b /tmp/ccX4yZ.o
-                0x0000000000001149                main
-.text.yardimci  0x0000000000001174       0x40 /tmp/ccX4yZ.o
-                0x0000000000001174                yardimci_hesap
- *fill*         0x00000000000011b4        0xc
-```
+No link map was measured during this revision. Inspect `Discarded input sections`, `.text.*`, and `*fill*` in your actual `cikis.map`. Do not assume the same elimination without `--gc-sections`, or that every discarded entry is attributable only to that option. Record alignment and addresses with compiler/linker versions.
 
-`*fill*` satırı, bir sonraki fonksiyonun önbellek veya dallanma performansı için (örneğin 16-bayt hizalama) linker tarafından doldurulduğunu gösterir.
+## 5. Symbols defined by the linker
 
-## 5. Linker Tarafından Otomatik Üretilen Semboller
+Linker scripts can define symbols that programs use to inspect image boundaries:
 
-Linker, programın segment ve bölüm sınırlarını çalışma anında kodun okuyabilmesi için özel semboller tanımlar:
-- `__executable_start`: Kod segmentinin başlangıç adresi.
-- `_etext` veya `etext`: Kod (`.text`) bölümünün bittiği adres.
-- `_edata` veya `edata`: Başlatılmış veri (`.data`) bölümünün bittiği adres.
-- `_end` veya `end`: Başlatılmamış veri (`.bss`) alanının bittiği, yani heap'in başladığı adres.
+- `__executable_start`: The executable image's start in GNU ld's default script. This can include the ELF header and is not necessarily the RX `.text` start.
+- `_etext` or `etext`: The end of the text area.
+- `_edata` or `edata`: The end of initialized data.
+- `_end` or `end`: The end of uninitialized data, not the actual program break or heap base. Consider ASLR and allocator mappings separately ([end(3)](https://man7.org/linux/man-pages/man3/end.3.html)).
 
-Bu semboller bir C programında harici (`extern`) tanımlanarak okunabilir:
+Read these symbols in C through `extern` declarations:
 
 ```c
 #include <stdio.h>
@@ -121,20 +115,20 @@ Bu semboller bir C programında harici (`extern`) tanımlanarak okunabilir:
 extern char etext, edata, end;
 
 int main(void) {
-    printf("Kod sonu (etext) : %p\n", (void *)&etext);
-    printf("Veri sonu (edata): %p\n", (void *)&edata);
-    printf("BSS sonu (end)   : %p (Heap baslangici)\n", (void *)&end);
+    printf("Text end (etext) : %p\n", (void *)&etext);
+    printf("Data end (edata): %p\n", (void *)&edata);
+    printf("BSS end (end)   : %p\n", (void *)&end);
     return 0;
 }
 ```
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Linker'ın oluşturduğu bu yapının çekirdek tarafından nasıl belleğe taşındığını görmek için [Başlangıç ve auxv](baslangic-ve-auxv.md) rehberine geçin. Fonksiyonların dış kütüphanelerle dinamik olarak nasıl eşleştirildiğini anlamak için [Dinamik bağlama](dinamik-baglama.md) sayfasını inceleyin.
+Read [startup and auxv](baslangic-ve-auxv.md) to see how the kernel loads the resulting layout. Continue with [dynamic linking](dinamik-baglama.md) for the connection between functions and external libraries.
 
-## Kaynaklar
+## Sources
 
 - [GNU ld: Basic Linker Script Concepts](https://sourceware.org/binutils/docs/ld/Basic-Script-Concepts.html)
-- [MaskRay: Linker Script Internals](https://maskray.me/blog/2021-07-04-linker-script-internals)
+- [GNU ld: Linker Scripts](https://sourceware.org/binutils/docs/ld/Scripts.html)
 - [Ian Lance Taylor: Linkers (20-part essay series)](https://www.airs.com/blog/archives/38)
-- [LLVM lld: The ELF Linker](https://lld.llvm.org/ELF/)
+- [LLVM lld: The LLVM Linker — ELF port](https://lld.llvm.org/)

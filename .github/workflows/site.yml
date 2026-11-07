@@ -15,6 +15,23 @@ concurrency:
   group: execmap-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  assembly-labs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native Linux lab tools
+        run: sudo apt-get update && sudo apt-get install -y gcc binutils gdb
+      - name: Verify published C examples and GDB sessions
+        run: python3 scripts/verify-assembly-labs.py --require-linux-gdb
+      - name: Assembly validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assembly-validation
+          path: output/assembly-validation
+          if-no-files-found: error
+          retention-days: 7
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -50,7 +67,7 @@ jobs:
           path: _site
   deploy:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy)
-    needs: build
+    needs: [build, assembly-labs]
     permissions:
       pages: write
       id-token: write

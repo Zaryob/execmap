@@ -1,117 +1,109 @@
 ---
-title: "Paketli ve şifrelenmiş ELF (Packers) analizi"
+title: Analyzing packed and encrypted ELF files
 ---
 
-# Paketli ve şifrelenmiş ELF (Packers) analizi
+# Analyzing packed and encrypted ELF files
 
-Paketleyiciler (packers) ve kriptörler (crypters), bir ikili dosyanın asıl kodunu sıkıştırarak veya şifreleyerek diske saklayan, çalışma anında ise bu içeriği belleğe açıp yürüten özel yazılımlardır. Başlangıçta dosya boyutunu küçültmek amacıyla (örneğin UPX) geliştirilen bu araçlar; günümüzde tersine mühendisliği zorlaştırmak, statik anti-virüs imzalarını atlatmak ve fikri mülkiyeti korumak için sıkça kullanılır.
+Packers and crypters store a program's original code in compressed or encrypted form and unpack it into memory at runtime. Originally associated with reducing executable size, as with UPX, these techniques are also used to complicate reverse engineering, evade static antivirus signatures, and protect intellectual property.
 
-Linux dünyasında bu mimarinin kurucu öncüsü, TESO grubu tarafından 2002 yılında yazılan **`Burneye`** projesidir. Burneye; ikiliyi AES/XOR ile şifreleme, doğrudan çekirdek sistem çağrılarıyla anti-debugging yapma ve çalışma anında sayfa izinlerini manipüle ederek OEP'ye atlama kalıbını ilk kez mükemmelleştirmiştir.
+Static inspection can reveal the unpacking stub, data layout, and possible unpacking mechanism. In-memory analysis may also be necessary. Do not assume every sample unpacks completely at one instant. This guide makes no unverified claim about Burneye's encryption algorithm or historical priority.
 
-Bir analistin paketli bir dosyayı disasm etmeye çalışması zaman kaybıdır; çünkü ekranda görünen kod yalnızca açıcı rutine (unpacking stub) aittir. Asıl program mantığını görebilmek için dosyanın bellekte açıldığı anı (Original Entry Point - OEP) tespit etmek ve programı bellekten dökmek (dumping) gerekir.
+## 1. Indicators of packing
 
-## 1. Bir ELF'in Paketli Olduğunu Gösteren Belirtiler
+A missing section table, few dynamic symbols, unpacking patterns, and high byte entropy are **clues to assess together**. Each can also occur in ordinary binaries. Do not apply UPX PE section names, such as `UPX0`, to all ELF files; examine [UPX's ELF implementation](https://github.com/upx/upx/tree/devel/src).
 
-Paketlenmiş bir ikili dosya, statik incelemede şu karakteristik anormallikleri sergiler:
+### A. Shannon entropy
 
-```text
-Normal ELF                                         Paketlenmiş ELF
-+-------------------------------+                  +-------------------------------+
-| Section'lar: .text, .rodata   |                  | Section'lar: Yok ya da UPX0   |
-| Düşük/Orta Entropi (~5.5-6.5) |                  | Yüksek Entropi (> 7.5 - Kaos) |
-| Onlarca Dinamik Sembol        |                  | Çok Az Sembol (mmap, mprotect)|
-| Normal p_filesz == p_memsz    |                  | p_memsz >> p_filesz           |
-+-------------------------------+                  +-------------------------------+
-```
+Byte-histogram entropy ranges from 0 to 8 bits per byte. A high value may support a compression or encryption hypothesis, but a universal threshold of 7.2 is not a diagnostic guarantee. Repeating the deterministic sequence `00..ff` gives 8. Single-byte XOR only relabels histogram bins and does not change entropy. Record the selected region, sample size, and calculation.
 
-### A. Yüksek Shannon Entropisi
-Sıkıştırılmış veya AES/RC4/XOR ile şifrelenmiş veri blokları yüksek matematiksel rastgelelik sergiler. 8.0 üzerinden 7.2'nin üzerindeki entropi değerleri, segmentin şifreli veya sıkıştırılmış olduğunu neredeyse garantiler.
+### B. Dynamic symbols
 
-### B. Aşırı Kısıtlı İçe Aktarım (Import) Tablosu
-Karmaşık bir program normalde onlarca libc fonksiyonu kullanır. Ancak paketli bir ikilinin `readelf --dyn-syms` çıktısında yalnızca bellek tahsis fonksiyonları (`mmap`, `mprotect`) veya doğrudan ham sistem çağrıları (`syscall`) görülür.
+Few imports may indicate packing, but static linking or a small program can produce the same appearance. Raw `syscall` instructions need not have `.dynsym` entries.
 
-### C. Aşırı Boyut Farkı (p_memsz >> p_filesz)
-Paketleyici stub'ı, açılacak orijinal ikili için bellekte devasa bir alan açar; bu nedenle `LOAD` segmentinin `MemSiz` değeri `FileSiz` değerinin katbekat üstündedir.
+### C. FileSiz / MemSiz
 
-## 2. Açılma Döngüsü ve OEP (Original Entry Point)
+`p_memsz > p_filesz` is normal for `.bss`. A packer can also allocate its destination later with `mmap`; a large difference is neither necessary nor sufficient evidence of packing.
 
-Tüm paketleyiciler temel bir yaşam döngüsünü takip eder:
+## 2. Unpacking loops and the original entry point
+
+Some unpackers follow this pattern, but staged unpacking, existing RX/RWX regions, and other permission policies are possible:
 
 ```text
-[Stub Başlar]
+[Stub starts]
       |
       v
-[Bellek Alanı Ayır] (mmap veya mevcut segment)
+[Allocate memory] (mmap or an existing segment)
       |
       v
-[Şifreyi Çöz / Sıkıştırmayı Aç] (XOR / LZMA / aPLib)
+[Decrypt / decompress] (XOR / LZMA / aPLib)
       |
       v
-[İzinleri Düzelt (W^X İhlali)] (mprotect: RW -> RX)
+[Adjust permissions] (mprotect: RW -> RX)
       |
       v
-[Kuyruk Atlama (Tail Jump)] -----> jmp *%rax  /  push %rax; ret
-                                           |
-                                           v
-                              [OEP: Orijinal Program Başlar!]
+[Tail jump] -----> jmp *%rax / push %rax; ret
+                          |
+                          v
+                [OEP: original program starts]
 ```
 
-Analistin nihai hedefi **Tail Jump** (Kuyruk Atlaması) anını yakalamaktır. Açıcı rutin bittiğinde, işlemci kayıtlarını orijinal programın beklediği ilk duruma getirir ve orijinal giriş noktasına (OEP) uzun bir atlama (`jmp`) yapar.
+An investigation may seek the **tail jump** from the unpacker into the original program. In this pattern, the stub restores expected register state and jumps to the original entry point (OEP).
 
-## 3. GDB ile OEP Tespiti ve Manuel Unpacking
+## 3. Finding an OEP candidate with GDB
 
-Paketli bir dosyayı GDB ile adım adım çözmek için şu dinamik teknikler kullanılır:
+The following techniques can help investigate a packed file.
 
-### Yöntem A: mprotect Sistem Çağrısını Yakalamak (W^X Geçişi)
-Açıcı rutin kodu belleğe yazarken sayfa yazılabilir (`RW`) durumdadır. Kodu çalıştırmadan hemen önce sayfayı `RX` yapmak zorundadır:
+### Method A: inspecting permission transitions
 
-```bash
-gdb -q ./paketli_ornek
+RW→RX preserves basic W^X by avoiding simultaneous write and execute permissions. Stricter execmem/W!→X policies may prohibit this transition too. Not every packer needs such a transition.
+
+These **Linux x86-64 GDB steps** do not guarantee OEP recovery and were not run against a packed fixture during this revision:
+
+```text
 (gdb) catch syscall mprotect
 (gdb) run
-# mprotect tetiklendiğinde argümanları incele:
-(gdb) info registers $rdi $rsi $rdx
-# $rdx == 0x5 ise sayfa PROT_READ | PROT_EXEC oluyordur!
-# mprotect tamamlanıp döner dönmez:
-(gdb) finish
-# Sayfadaki ilk komuta donanımsal kesme koy:
-(gdb) hbreak *$rdi
+# At the GDB “call to syscall” entry stop:
+(gdb) set $region = $rdi
+(gdb) set $length = $rsi
+(gdb) set $protection = $rdx
 (gdb) continue
+# At the “returned from syscall” exit stop:
+(gdb) p/d (long)$rax
 ```
 
-İşlemci donanımsal kesmeyle durduğunda program OEP noktasındadır.
+In multithreaded processes, correlate entry and exit by thread. After a successful return, inspect the saved range using mappings and disassembly, then identify the actual control-transfer target. `finish` runs until return from the current function; it is not a syscall-exit command. `$region` is a page address, not necessarily the OEP. Set a breakpoint only at a verified candidate instruction and compare with a known unpacked program ([GDB catchpoints](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Set-Catchpoints.html)).
 
-### Yöntem B: eBPF ile Açılma Anını Dışarıdan İzlemek
-Program anti-debugging içeriyorsa, çekirdek seviyesindeki eBPF ile hedef sürecin `mprotect` çağrısını yakalayıp PID ve bellek adresini dökün:
+### Method B: observing unpacking with eBPF
+
+If a program has anti-debugging checks, use kernel-level eBPF observation to capture its `mprotect` calls, PID, and memory address:
 
 ```bash
 sudo bpftrace -e 'tracepoint:syscalls:sys_enter_mprotect /comm == "paketli_ornek"/ {
-    printf("mprotect: addr=0x%lx len=%d prot=0x%x\n", args.start, args.len, args.prot);
+    printf("mprotect: addr=0x%lx len=%lu prot=0x%x\n", args.start, args.len, args.prot);
 }'
 ```
 
-## 4. Bellekten İkiliyi Dökmek (Memory Dumping)
+## 4. Dumping memory
 
-Program OEP noktasına ulaştığında bellekte tamamen deşifre edilmiş durumdadır. Bu aşamada sürecin bellek görüntüsü diske aktarılır:
+Save the relevant ranges at a known unpacking point. With staged unpacking, not all code may be present; core coverage also depends on filters and permissions:
 
 ```bash
-# 1. GDB içinden tam core snapshot almak:
+# 1. Generate a core inside GDB (check coverage):
 (gdb) gcore acilmis_program.dump
 
-# 2. Veya yalnızca açılmış kod sayfasını ham bayt olarak kaydetmek:
+# 2. Or save only the unpacked code page as raw bytes:
 (gdb) dump memory acilmis_kod.bin 0x401000 0x405000
 ```
 
-Dökülen bu dosya üzerinde `strings`, sembol aramaları ve disassembler analizi, paketleyici engeline takılmaksızın doğrudan orijinal kod üzerinden yürütülebilir.
+A raw dump is not an ELF file. Import it using its architecture, base address, and range metadata. Missing pages and runtime relocations further complicate rebuilding a runnable file.
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Bellekten dökülen core dosyalarını analiz etmek ve modül bilgilerini ayrıştırmak için [Core ve snapshot](core-ve-snapshot.md) rehberine geçin. Sürecin çalışma anındaki CPU yürütme yollarını profillemek için [Perf ile yürütme analizi](perf-ile-yurutme.md) konusunu inceleyin.
+Read [core dumps and snapshots](core-ve-snapshot.md) to analyze memory dumps and module information. Continue with [execution analysis with perf](perf-ile-yurutme.md) to profile runtime CPU paths.
 
-## Kaynaklar
+## Sources
 
 - [UPX: the Ultimate Packer for eXecutables](https://upx.github.io/)
 - [UPX Recovery Tool — Nozomi Networks (GitHub)](https://github.com/NozomiNetworks/upx-recovery-tool)
-- [Ghidra: Analyzing packed and obfuscated binaries](https://ghidra-sre.org/)
-
+- [Ghidra — official project and documentation](https://github.com/NationalSecurityAgency/ghidra)
 - [UPX source code](https://github.com/upx/upx)

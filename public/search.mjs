@@ -1,5 +1,5 @@
 export function normalize(text) {
-  return String(text).toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i');
+  return String(text).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i');
 }
 export function searchPages(pages, query, limit = 40) {
   const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
@@ -11,7 +11,7 @@ export function searchPages(pages, query, limit = 40) {
     if (!terms.every(term => `${title} ${summary} ${body}`.includes(term))) return null;
     const score = terms.reduce((total, term) => total + (title.includes(term) ? 10 : 0) + (summary.includes(term) ? 4 : 0) + (body.includes(term) ? 1 : 0), 0);
     return { ...page, score };
-  }).filter(Boolean).sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, 'tr')).slice(0, limit);
+  }).filter(Boolean).sort((a, b) => b.score - a.score || a.title.localeCompare(b.title, 'en')).slice(0, limit);
 }
 export function excerpt(text, query, length = 155) {
   const clean = String(text).replace(/\s+/g, ' ').trim();

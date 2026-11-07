@@ -1,123 +1,136 @@
 ---
-title: "Özel yükleyiciler ve bellek içi çalıştırma (In-Memory Execution)"
+title: Custom loaders and in-memory execution
 ---
 
-# Özel yükleyiciler ve bellek içi çalıştırma (In-Memory Execution)
+# Custom loaders and in-memory execution
 
-Geleneksel Linux mimarisinde yeni bir program çalıştırmanın yolu bellidir: bir süreç `fork()` ile çatallanır ve `execve()` sistem çağrısıyla yeni bir ELF dosyasını diskten yükler. EDR sistemleri, `auditd`, Falco ve güvenlik izleyicileri tam da bu noktada devreye girerek `sys_enter_execve` olaylarını denetler.
+On Linux, `execve` replaces the current process image. It does not require a preceding `fork`, and it does not change the PID. `execveat` is another execution path. Watching only `sys_enter_execve` therefore does not cover every path; validate tool and rule coverage separately.
 
-İleri düzey zararlı yazılımlar, paketleyiciler (packers) ve bellek içi modüller, disk üzerinde iz bırakmamak ve `execve` kontrollerini atlatmak için **Özel Yükleyiciler (Custom Loaders / Userland Execve)** kullanır. Bu teknikler, çekirdeğin yükleme rutinini (`load_elf_binary`) doğrudan kullanıcı alanında (userspace) taklit ederek ELF dosyasını tamamen bellek içinde ayrıştırıp çalıştırır.
+Advanced malware, packers, and in-memory modules use **custom loaders** or **user-space exec** to reduce on-disk artifacts or avoid checks focused on `execve`. These techniques reproduce parts of the kernel's `load_elf_binary` work in user space, parsing and loading an ELF image in memory.
 
-## 1. Bellek İçi Yükleme Yöntemlerinin Evrimi
+## 1. Approaches to in-memory loading
 
-Linux'ta bellek içi çalıştırma teknikleri temel olarak üç ana mimari evreye ayrılır:
+Linux in-memory execution techniques can be grouped into three broad approaches:
 
 ```text
-1. Dosya Tanımlayıcı Tabanlı (memfd_create)
-   [RAM] -> memfd_create() -> fexecve(fd) -> [Kernel standart yükleme yapar]
-   (Diske dosya yazılmaz, ancak kernel hâlâ bir 'execve' olayı üretir)
+1. File-descriptor-based loading (memfd_create)
+   [RAM] -> memfd_create() -> fexecve(fd) -> [Kernel ELF loading]
+   (Kernel exec path; the syscall can be execveat or execve)
 
-2. Kullanıcı Alanı Yükleyicisi (Userland Exec)
-   [RAM] -> mmap(MAP_ANON) -> Segmentleri kopyala -> Relocation çöz -> jmp *e_entry
-   (Hiçbir execve çağrısı yapılmaz; süreç kimliği ve PID değişmez)
+2. User-space loader
+   [RAM] -> mmap(MAP_ANON) -> Copy segments -> Relocate -> jmp *e_entry
+   (No new exec call; the existing process and PID remain)
 
-3. Süreç İçi Bellek Üzerine Yazma (Process Hollowing / /proc/self/mem)
-   [Mevcut Süreç] -> Kendini veya hedefi unmap et -> Yeni ELF'i mmap et -> Yığını ayarla
+3. Replacing memory inside a process (hollowing / /proc/self/mem)
+   [Existing process] -> Unmap old image -> Map new ELF -> Prepare stack
 ```
 
-## 2. memfd_create ve fexecve Yaklaşımı
+## 2. memfd_create and fexecve
 
-Linux 3.17 ile gelen `memfd_create` sistem çağrısı, diskte herhangi bir dosya oluşturmadan tamamen RAM üzerinde isimsiz bir dosya tanımlayıcısı (file descriptor) yaratır:
+Introduced in Linux 3.17, `memfd_create` creates a descriptor for an anonymous, memory-backed file without creating a conventional filesystem file:
 
 ```c
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 
 int run_from_memory(const unsigned char *elf_bytes, size_t size, char **argv, char **envp) {
-    // 1. RAM üzerinde anonim bir dosya oluştur
-    int fd = syscall(SYS_memfd_create, "gizli_modul", MFD_CLOEXEC);
+    // 1. Create an anonymous memory-backed file
+    int fd = syscall(SYS_memfd_create, "memory_module", MFD_CLOEXEC);
     if (fd < 0) { perror("memfd_create"); return -1; }
 
-    // 2. ELF ikili baytlarını bu dosya tanımlayıcısına yaz
-    if (write(fd, elf_bytes, size) != (ssize_t)size) {
-        perror("write");
-        close(fd);
-        return -1;
+    // 2. Handle short writes and EINTR
+    size_t done = 0;
+    while (done < size) {
+        size_t chunk = size - done;
+        if (chunk > (size_t)SSIZE_MAX) chunk = (size_t)SSIZE_MAX;
+        ssize_t n = write(fd, elf_bytes + done, chunk);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) {
+            if (n == 0) errno = EIO;
+            perror("write"); close(fd); return -1;
+        }
+        done += (size_t)n;
     }
 
-    // 3. Dosya tanımlayıcısı üzerinden programı çalıştır
-    // Çekirdekte bu işlem /proc/self/fd/<fd> üzerinden execve'ye dönüşür
+    // 3. glibc 2.27+ can use execveat on a suitable kernel;
+    // older / fallback implementations use /proc/self/fd.
     fexecve(fd, argv, envp);
 
-    // Başarılıysa buraya asla dönmez
+
+    // A successful exec never returns here
     perror("fexecve");
     close(fd);
     return -1;
 }
 ```
 
-Bu yöntem diske dosya yazmaz; ancak adli bilişim (forensics) incelemesinde `/proc/<pid>/fd/` altında `memfd:gizli_modul (deleted)` şeklinde net bir iz bırakır.
+This Linux/glibc function fragment expects ELF bytes and valid `argv`/`envp`. It was not compiled or executed on Linux during this revision. [fexecve(3)](https://man7.org/linux/man-pages/man3/fexecve.3.html) documents glibc 2.27+ using `execveat` on a suitable kernel. A memfd name may appear in mappings or `/proc/<pid>/fd` while the descriptor is open. Successful exec closes an `MFD_CLOEXEC` descriptor, so do not assume its fd-list entry remains. For script files, CLOEXEC can also cause `ENOENT`. Memory backing does not guarantee an absence of disk artifacts: consider swap and execution policies.
 
-## 3. Kullanıcı Alanında ELF Yükleme
+## 3. Loading ELF in user space
 
-Kullanıcı alanı yükleyicisi, yeni bir `execve` çağrısı yapmadan kodu mevcut adres uzayına yerleştirebilir. Desteklediği ELF türüne bağlı olarak segment eşleme, relocation ve başlangıç durumu görevlerini üstlenir. Aşağıdaki liste [ELF yükleyicisinin](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c) ve [x86-64 ABI sözleşmesinin](https://gitlab.com/x86-psABIs/x86-64-ABI) görevlerinden hareketle bir inceleme çerçevesidir; tam bir yükleyici uygulaması değildir:
+A user-space loader can place code in the existing address space without a new `execve`. Depending on the ELF types it supports, it takes responsibility for mappings, relocations, and startup state. The following checklist derives from the [ELF loader](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c) and [x86-64 ABI](https://gitlab.com/x86-psABIs/x86-64-ABI); it is an investigation framework, not a complete implementation:
 
-1. **Bellek Ayırma**: `mmap()` ile `PROT_READ | PROT_WRITE | PROT_EXEC` veya ayrı ayrı `RX` ve `RW` segmentleri açılır.
-2. **Segmentlerin Kopyalanması**: ELF'in `PT_LOAD` segmentleri hesaplanan `p_vaddr` adreslerine yerleştirilir.
-3. **BSS Sıfırlama**: `p_memsz > p_filesz` olan alanlar `memset(0)` ile temizlenir.
-4. **Relocation Çözümleme**: Eğer ikili dinamik bağlıysa, `DT_RELA` tablosu okunarak GOT ve fonksiyon göstericileri dinamik kütüphanelerin adreslerine göre güncellenir.
-5. **Yığın ve auxv Kurulumu**: Yeni programın beklediği `argc`, `argv`, `envp` ve `auxv` yapıları yığına yazılır.
-6. **Kontrole Geçiş**: Relocation tabanı hesaba katılarak giriş noktasına geçilir. Dinamik ikililerde interpreter, TLS ve diğer runtime gereksinimleri de karşılanmalıdır.
+1. **Allocate memory**: Use `mmap()` for `PROT_READ | PROT_WRITE | PROT_EXEC` or separate RX/RW segments.
+2. **Copy segments**: Place `PT_LOAD` contents at the calculated `p_vaddr` locations.
+3. **Zero BSS**: Clear the `p_memsz > p_filesz` tail.
+4. **Resolve relocations**: For a dynamic image, process the relevant tables, including `DT_RELA`, and update pointers using loaded library addresses.
+5. **Prepare the stack and auxv**: Supply the expected `argc`, `argv`, `envp`, and `auxv` structures.
+6. **Transfer control**: Account for the relocation base when entering the image. Dynamic images also require interpreter, TLS, and other runtime setup.
 
-Bu senaryoda işletim sistemi hiçbir yeni süreç açıldığını bilmez; var olan süreç kimliği (PID), ana süreç adı ve dosya yolu `/proc/<pid>/exe` değişmeden kalır.
+A new process is not required, so the PID may remain unchanged. Kernel events such as `mmap` and `mprotect` can still be observed. Programs can change their process name; stable identity fields are not a universal detection rule.
 
-## 4. İkili Yamalama: ERESI/elfsh'ten LIEF'e
+## 4. Binary patching: from ERESI/elfsh to LIEF
 
-Tarihsel **`ERESI / elfsh`** aracı, kaynak kod olmadan bir ikili dosyanın içine doğrudan yeni segment ekleme ve kontrol akışını yönlendirme teorisini geliştirmiştir. Günümüzde bu işlem modern **[LIEF](https://github.com/lief-project/LIEF)** kütüphanesiyle Python üzerinden programatik olarak yapılır:
+The historical **ERESI/elfsh** toolkit explored adding segments and redirecting control flow without source code. Today, **[LIEF](https://github.com/lief-project/LIEF)** supports programmatic binary transformation in Python.
+
+This example uses the **LIEF 0.17.1 Python API** on a Linux x86-64 ELF with a section table. The new entry point only performs `exit(0)`; it is not a loader that resumes the original application. Its output was checked structurally, but Linux execution was not tested during this revision. Do not apply the example directly to a sectionless file.
 
 ```python
 import lief
 
-# 1. Mevcut ikiliyi yükle
-binary = lief.parse("./ornek")
-
-# 2. Yeni bir çalıştırılabilir yükleyici segmenti ekle
+binary = lief.ELF.parse("./ornek")
+if binary is None or binary.header.machine_type != lief.ELF.ARCH.X86_64:
+    raise ValueError("Linux x86-64 ELF required")
+if len(binary.sections) < 2:
+    raise ValueError("This example requires an existing section table")
 section = lief.ELF.Section(".yukleyici")
-section.content = list(b"\x90\x90\xcc\xc3")  # Enjekte edilecek makine kodu
-section.flags = lief.ELF.SECTION_FLAGS.ALLOC | lief.ELF.SECTION_FLAGS.EXECINSTR
-binary.add(section, loaded=True)
-
-# 3. Giriş noktasını yeni segmente yönlendir
-binary.header.entrypoint = section.virtual_address
+section.type = lief.ELF.Section.TYPE.PROGBITS
+# Linux x86-64: mov eax,60; xor edi,edi; syscall -> exit(0)
+section.content = list(b"\xb8\x3c\x00\x00\x00\x31\xff\x0f\x05")
+section.flags = lief.ELF.Section.FLAGS.ALLOC | lief.ELF.Section.FLAGS.EXECINSTR
+added = binary.add(section, loaded=True)
+binary.header.entrypoint = added.virtual_address
 binary.write("./ornek_yamali")
 ```
 
-## 5. Özel Yükleyicileri Bellekte Tespit Etmek
+Reparse the written file and verify that its entry point lies in an executable `PT_LOAD` range and that the added bytes are intact. No historical enum-transition date is assumed here; use the [LIEF ELF API](https://lief.re/doc/latest/formats/elf/python.html).
 
-Tersine mühendislik ve olay müdahalesi (incident response) sırasında özel bir yükleyicinin varlığı şu anomalilerden anlaşılır:
+## 5. Investigating custom loaders in memory
 
-### A. Unbacked Executable Memory (Dosyaya Dayanmayan Kod Sayfaları)
-Normal bir Linux programında çalıştırılabilir (`r-xp`) sayfalar diskteki bir dosyaya bağlıdır (örneğin `/usr/lib/libc.so`). Eğer `/proc/<pid>/maps` içinde bir `r-xp` sayfasının dosya yolu boşsa `[anon]` veya `memfd:` içeriyorsa, bellek içi bir yükleyici çalışıyor demektir:
+The following observations can guide reverse engineering and incident response.
 
-```bash
-grep "r-xp" /proc/$PID/maps | grep -v "/"
-```
+### A. Executable memory without a conventional backing file
 
-### B. W^X (Write XOR Execute) İhlalleri
-Bir bellek alanının aynı anda hem yazılabilir hem çalıştırılabilir (`rwx`) olması ya da bir sayfanın önce `rw-`, ardından `mprotect` ile `r-x` yapılması yükleyicinin kod açma aşamasını ele verir.
+Anonymous executable memory may have legitimate explanations such as JIT compilation. A memfd mapping is file-backed and is not the same as an unnamed anonymous mapping. Unnamed mappings usually have an empty path; named private anonymous mappings may appear as `[anon:name]`. Do not infer section names, execution, or maliciousness from mapping permissions alone ([proc_pid_maps(5)](https://man7.org/linux/man-pages/man5/proc_pid_maps.5.html)).
 
-## İncelemeyi Derinleştir
+### B. Permission transitions
 
-Bellek izinlerinin değişimini strace ve C koduyla canlı simüle etmek için [Bellek izinleri laboratuvarı](../laboratuvarlar/bellek-izinleri.md) çalışmasını yapın. Kendi kendini açan ve bellek içi yükleyici barındıran paketli ikilileri analiz etmek için [Paketli ELF](paketli-elf.md) rehberine geçin.
+Simultaneous `rwx` violates basic W^X. An RW-then-RX transition preserves that principle, although stricter execmem policies may forbid the transition. Both are investigation clues. Correlate content, control flow, and calls before concluding that a custom loader is present.
 
-## Kaynaklar
+## Investigate further
+
+Use C and strace in the [memory permissions laboratory](../laboratuvarlar/bellek-izinleri.md) to observe permission changes. Continue with [packed ELF](paketli-elf.md) for self-unpacking binaries containing in-memory loader logic.
+
+## Sources
 
 - [stelf-loader — David Buchanan (GitHub)](https://github.com/DavidBuchanan314/stelf-loader)
-- [LIEF: ELF Binary Modification Guide](https://lief-project.github.io/doc/latest/tutorials/02_elf_hooking.html)
+- [LIEF: ELF Python API](https://lief.re/doc/latest/formats/elf/python.html)
 - [memfd_create — Linux man-pages](https://man7.org/linux/man-pages/man2/memfd_create.2.html)
-
 - [Linux v6.12: ELF loading implementation](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c)

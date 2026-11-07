@@ -1,105 +1,110 @@
 ---
-title: "ELF parser'ları ve adres hesaplarını doğrulamak"
+title: Validating ELF parsers and address calculations
 ---
 
-# ELF parser'ları ve adres hesaplarını doğrulamak
+# Validating ELF parsers and address calculations
 
-Tersine mühendislik ve ikili dosya analizinde kullanılan araçlar (Ghidra, IDA, radare2, pyelftools, LIEF vb.) dosyanın geçerliliği hakkında birbirinden farklı varsayımlarda bulunur. Bir aracın dosyayı açamaması veya bir alanı bozuk olarak işaretlemesi, Linux çekirdeğinin o dosyayı reddedeceği anlamına gelmez.
+Binary analysis tools such as Ghidra, IDA, radare2, pyelftools, and LIEF make different assumptions about file validity. A tool's inability to open a file, or its report of a malformed field, does not mean that the Linux kernel will reject that file.
 
-Bu durum, güvenlik ve tersine mühendislik literatüründe **Parser Differential** (Ayrıştırıcı Farklılığı) veya **LangSec** (Dil Tabanlı Güvenlik) problemi olarak adlandırılır. Çekirdeğin ELF yükleyicisi (`fs/binfmt_elf.c`), dosya çalıştırma performansını maksimize etmek için asgari seviyede kontrol yaparken; analiz araçları dosyanın spesifikasyona (System V ABI) tam uyumlu olduğunu varsayar.
+This issue is discussed as **parser differentials** or within **LangSec** (language-theoretic security). The kernel and analysis tools validate different fields for different purposes; acceptance depends on the tool, architecture, and version. This does not by itself establish a performance tradeoff or imply that every analyzer assumes full ABI compliance.
 
-## 1. C ile Basit ve Sağlam Bir ELF Parser Mimarisi
+## 1. A bounds-checked ELF64 inventory example
 
-Standart `<elf.h>` kütüphanesini kullanarak bir 64-bit ELF dosyasının başlık ve segment tablosunu güvenli biçimde ayrıştıran bir C örneği:
+This C11 program reads only **ELF64 little-endian** headers and `PT_LOAD` ranges; it does not execute code. ELF64 wire-format sizes are 64 and 56 bytes for `Elf64_Ehdr` and `Elf64_Phdr`. Decoding fields from bytes avoids host-endianness assumptions and unaligned struct access. `e_phentsize` must be exactly 56; extended `PN_XNUM` numbering is unsupported and explicitly rejected.
+
+The example accepts at most 64 MiB and reads the file into private memory. ELF32, big-endian data, section/relocation parsing, and complete Linux loadability checks are outside its scope. Acceptance does not mean the kernel can execute the file. Save it as `elf-envanter.c`:
 
 ```c
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <string.h>
-#include <elf.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 
-void parse_elf(const char *filepath) {
-    int fd = open(filepath, O_RDONLY);
-    if (fd < 0) { perror("open"); return; }
+enum { EH_SIZE = 64, PH_SIZE = 56, MAX_INPUT = 64 * 1024 * 1024 };
 
-    struct stat st;
-    if (fstat(fd, &st) < 0) { perror("fstat"); close(fd); return; }
-    size_t file_size = st.st_size;
-
-    if (file_size < sizeof(Elf64_Ehdr)) {
-        fprintf(stderr, "Hata: Dosya boyutu ELF basligindan kucuk!\n");
-        close(fd);
-        return;
+static uint16_t le16(const unsigned char *p) {
+    return (uint16_t)((uint16_t)p[0] | (uint16_t)p[1] << 8);
+}
+static uint32_t le32(const unsigned char *p) {
+    return (uint32_t)p[0] | (uint32_t)p[1] << 8 |
+           (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+static uint64_t le64(const unsigned char *p) {
+    return (uint64_t)le32(p) | (uint64_t)le32(p + 4) << 32;
+}
+static int reject(const char *reason) {
+    fprintf(stderr, "ELF rejected: %s\n", reason);
+    return 1;
+}
+static int parse_elf(const unsigned char *data, size_t size) {
+    if (size < EH_SIZE) return reject("short header");
+    if (memcmp(data, "\177ELF", 4) != 0) return reject("magic");
+    if (data[4] != 2 || data[5] != 1)
+        return reject("only ELF64 little-endian is supported");
+    if (data[6] != 1 || le32(data + 20) != 1)
+        return reject("version");
+    if (le16(data + 52) != EH_SIZE) return reject("e_ehsize");
+    uint64_t phoff = le64(data + 32);
+    uint16_t count = le16(data + 56);
+    if (count == 0xffff) return reject("PN_XNUM is unsupported");
+    if (count != 0 && le16(data + 54) != PH_SIZE)
+        return reject("e_phentsize");
+    // Check offset first, then remaining bytes / entry size. No wrapping addition/multiplication.
+    if (phoff > size || count > (size - (size_t)phoff) / PH_SIZE)
+        return reject("program header file bounds");
+    for (size_t i = 0; i < count; ++i) {
+        const unsigned char *ph = data + (size_t)phoff + i * PH_SIZE;
+        if (le32(ph) != 1) continue; // PT_LOAD
+        uint64_t offset = le64(ph + 8), vaddr = le64(ph + 16);
+        uint64_t filesz = le64(ph + 32), memsz = le64(ph + 40);
+        uint64_t align = le64(ph + 48);
+        if (offset > size || filesz > size - (size_t)offset)
+            return reject("segment file bounds");
+        if (filesz > memsz) return reject("p_filesz > p_memsz");
+        if (memsz > UINT64_MAX - vaddr) return reject("virtual address overflow");
+        if (align > 1 && ((align & (align - 1)) != 0 ||
+                          offset % align != vaddr % align))
+            return reject("segment alignment");
+        printf("PT_LOAD[%zu] offset=0x%" PRIx64 " vaddr=0x%" PRIx64
+               " filesz=0x%" PRIx64 " memsz=0x%" PRIx64 "\n",
+               i, offset, vaddr, filesz, memsz);
     }
-
-    uint8_t *map = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
-    if (map == MAP_FAILED) { perror("mmap"); return; }
-
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)map;
-
-    // 1. Magic byte kontrolü: 0x7f, 'E', 'L', 'F'
-    if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG) != 0) {
-        fprintf(stderr, "Hata: Gecersiz ELF magic baytlari!\n");
-        munmap(map, file_size);
-        return;
+    puts("Inventory checks passed; loadability was not tested.");
+    return 0;
+}
+int main(int argc, char **argv) {
+    if (argc != 2) { fprintf(stderr, "Usage: %s ELF\n", argv[0]); return 2; }
+    FILE *file = fopen(argv[1], "rb");
+    if (!file) { perror("fopen"); return 2; }
+    if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return 2; }
+    long length = ftell(file);
+    if (length < 0 || (uintmax_t)length > MAX_INPUT ||
+        (uintmax_t)length > SIZE_MAX) {
+        fclose(file); return reject("file size / 64 MiB limit");
     }
-
-    // 2. 64-bit mimari kontrolü
-    if (ehdr->e_ident[EI_CLASS] != ELFCLASS64) {
-        fprintf(stderr, "Bilgi: Bu parser yalnizca 64-bit ELF destekler.\n");
-        munmap(map, file_size);
-        return;
-    }
-
-    printf("Giris Adresi (e_entry): 0x%lx\n", (unsigned long)ehdr->e_entry);
-    printf("Program Header Tablosu Ofseti (e_phoff): 0x%lx\n", (unsigned long)ehdr->e_phoff);
-    printf("Program Header Sayisi (e_phnum): %u\n", ehdr->e_phnum);
-
-    // 3. Program Header tablosunun dosya sınırları içinde kaldığının doğrulanması
-    size_t phdr_end = ehdr->e_phoff + (size_t)ehdr->e_phnum * ehdr->e_phentsize;
-    if (phdr_end > file_size) {
-        fprintf(stderr, "Uyari: Program header tablosu dosya sinirlarini asiyor!\n");
-        munmap(map, file_size);
-        return;
-    }
-
-    Elf64_Phdr *phdrs = (Elf64_Phdr *)(map + ehdr->e_phoff);
-    for (int i = 0; i < ehdr->e_phnum; i++) {
-        Elf64_Phdr *ph = &phdrs[i];
-        if (ph->p_type == PT_LOAD) {
-            printf("\n[PT_LOAD Segment %d]\n", i);
-            printf("  Dosya Ofseti (p_offset): 0x%08lx\n", (unsigned long)ph->p_offset);
-            printf("  Sanal Adres (p_vaddr) : 0x%08lx\n", (unsigned long)ph->p_vaddr);
-            printf("  Dosya Boyutu (p_filesz): 0x%08lx\n", (unsigned long)ph->p_filesz);
-            printf("  Bellek Boyutu (p_memsz): 0x%08lx\n", (unsigned long)ph->p_memsz);
-            printf("  Izinler (p_flags)      : %c%c%c\n",
-                   (ph->p_flags & PF_R) ? 'R' : '-',
-                   (ph->p_flags & PF_W) ? 'W' : '-',
-                   (ph->p_flags & PF_X) ? 'X' : '-');
-
-            // Aralık taşma kontrolü (Overflow & Out-of-bounds check)
-            if (ph->p_offset + ph->p_filesz > file_size) {
-                fprintf(stderr, "  KRITIK HATA: p_offset + p_filesz dosya boyutunu asiyor!\n");
-            }
-            if (ph->p_filesz > ph->p_memsz) {
-                fprintf(stderr, "  UYARI: p_filesz > p_memsz (ABI ihlali)\n");
-            }
-        }
-    }
-
-    munmap(map, file_size);
+    rewind(file);
+    size_t size = (size_t)length;
+    unsigned char *data = malloc(size ? size : 1);
+    if (!data) { fclose(file); return 2; }
+    int bad = fread(data, 1, size, file) != size || ferror(file);
+    if (fclose(file) != 0) bad = 1;
+    int result = bad ? reject("could not read file") : parse_elf(data, size);
+    free(data);
+    return result;
 }
 ```
 
-## 2. pyelftools ile Segment Envanteri Çıkarmak
+```bash
+cc -std=c11 -Wall -Wextra -Werror -O2 elf-envanter.c -o elf-envanter
+./elf-envanter ./ornek
+```
 
-Otomasyon ve betik analizlerinde Python'ın `pyelftools` kütüphanesi endüstri standardıdır. Bu araçla segmentlerin aralıklarını ve dosya ofsetlerini hızla doğrulayabilirsiniz:
+The repository's `python3 scripts/verify-examples.py` compiles this Markdown's actual C block with ASan/UBSan. It tests short headers, incorrect entry sizes, wrapped offsets, and segment ranges using **real malformed ELF files**, rather than relying only on an arithmetic model.
+
+## 2. Building a segment inventory with pyelftools
+
+For automation, use `pyelftools` to list segments. This example only reports fields; it is not a range validator on its own. Record the dependency version:
 
 ```python
 #!/usr/bin/env python3
@@ -109,9 +114,9 @@ from elftools.elf.elffile import ELFFile
 def analyze_elf(filename):
     with open(filename, 'rb') as f:
         elf = ELFFile(f)
-        print(f"Mimari: {elf.get_machine_arch()}")
-        print(f"Giriş Adresi: 0x{elf.header['e_entry']:x}")
-        print("\nSegmentler:")
+        print(f"Architecture: {elf.get_machine_arch()}")
+        print(f"Entry point: 0x{elf.header['e_entry']:x}")
+        print("\nSegments:")
         for i, segment in enumerate(elf.iter_segments()):
             header = segment.header
             p_type = header['p_type']
@@ -131,46 +136,50 @@ def analyze_elf(filename):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print(f"Kullanım: {sys.argv[0]} <elf-dosyası>")
+        print(f"Usage: {sys.argv[0]} <elf-file>")
         sys.exit(1)
     analyze_elf(sys.argv[1])
 ```
 
-## 3. Parser Farklılıkları ve Tuzaklar (Parser Differentials)
+## 3. Parser differentials and traps
 
-Zararlı yazılımlar ve anti-analiz mekanizmaları, statik analiz araçlarının zaaflarından faydalanmak için ELF başlıklarını kasıtlı olarak tahrif eder:
+Malware and anti-analysis techniques may deliberately modify ELF headers to exploit analyzer assumptions.
 
-### A. Section Header Tablosunun Bozulması / Silinmesi
-ELF spesifikasyonuna göre bir programın çalışması için Section Header tablosu zorunlu değildir. `ehdr->e_shoff = 0` ve `ehdr->e_shnum = 0` yapıldığında `readelf -S` hiçbir şey göremez; Ghidra ve IDA gibi araçlar sembol ve fonksiyon ayrıştırmasında zorlanır, fakat Linux çekirdeği programı kusursuzca çalıştırır.
+### A. Corrupted or removed section headers
 
-### B. Overlapping (Çakışan) Segmentler
-İki farklı `PT_LOAD` segmentinin aynı dosya ofsetini (`p_offset`) farklı sanal adreslere eşlemesi mümkündür. Örneğin ELF başlığının bulunduğu `0x0000` ofseti, hem salt-okunur bir veri segmenti olarak hem de kod segmenti olarak eşlenebilir. Bu durum, statik ayrıştırıcıların kontrol akış grafiğini (CFG) çarpıtabilir.
+Ordinary program loading does not require a section header table. With `ehdr->e_shoff = 0` and `ehdr->e_shnum = 0`, `readelf -S` cannot list sections, and tools such as Ghidra and IDA may have difficulty identifying symbols and functions. Linux may still load the file if other requirements hold. Clearing these fields alone is not proof of loadability.
 
-### C. Başlık İçinde Başlık (Overlapping ELF Headers)
-ELF ve program başlıklarının aynı baytları paylaşması, bir alanın birden fazla yapının koşullarını sağlamasını gerektirir. Böyle bir düzenin kabul edilmesi mimariye, çekirdek sürümüne ve başlık doğrulamalarına bağlıdır. Sabit bir asgari dosya boyutu veya her ortamda çalışabilirlik varsaymayın; `e_phoff`, `e_phentsize` ve `e_phnum` değerlerini dosya sınırları ve [Linux v6.12 yükleyici kontrolleri](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c) ile karşılaştırın.
+### B. Overlapping segments
 
-## 4. Modern Ayrıştırma Araçları: fq ve Binsider
+Different `PT_LOAD` segments may map the same file offset (`p_offset`) at different virtual addresses. For example, offset `0x0000` containing the ELF header may be mapped into both a read-only data segment and a code segment. This can complicate an analyzer's control-flow graph.
 
-Geleneksel `readelf` ve `objdump` araçlarının yanı sıra yapısal ikili inceleme için geliştirilmiş modern araçlar:
+### C. Overlapping ELF headers
 
-- **`fq`**: İkili dosyaları `jq` benzeri sözdizimiyle sorgulayan ve dilimleyen güçlü bir araçtır:
+When ELF and program headers share bytes, a field must satisfy more than one structure's constraints. Acceptance depends on architecture, kernel version, and header validation. Do not assume a universal minimum file size or execution on every system. Compare `e_phoff`, `e_phentsize`, and `e_phnum` with file boundaries and the [Linux v6.12 loader checks](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c).
+
+## 4. Structural inspection with fq and Binsider
+
+Alongside `readelf` and `objdump`, these tools support structural binary inspection:
+
+- **`fq`**: First display the decoder's own structure:
   ```bash
-  fq '.program_headers[] | select(.type == "LOAD") | {offset: .offset, vaddr: .vaddr, memsz: .memsz}' ./ornek
+  fq -d elf '.' ./ornek
   ```
-- **`binsider`**: ELF başlıklarını, bağımlılıkları, string'leri ve hexdump görünümünü modern bir terminal arayüzünde (TUI) interaktif olarak sunar:
+  This inventory command was run with fq 0.15.1 on macOS arm64 against an ELF64 fixture. Select query fields from your version's output. The older `.program_headers[].type == "LOAD"` recipe is not presented here as a validated API; decoder symbols and field paths depend on the version. Compare with the [decoder source](https://github.com/wader/fq/blob/master/format/elf/elf.go).
+
+- **`binsider`**: An interactive terminal interface for ELF headers, dependencies, strings, and hexdumps:
   ```bash
   binsider ./ornek
   ```
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Segment ve ofset hesaplarının sağlamlığını test ettikten sonra, bu segmentlerin derleme aşamasında linker tarafından nasıl yerleştirildiğini görmek için [Linker düzeni](linker-duzeni.md) rehberine geçin. Dosyanın çekirdek tarafından yüklenip `main` öncesi ilk komutun nasıl işletildiğini incelemek için [Başlangıç ve auxv](baslangic-ve-auxv.md) konusuna odaklanın.
+After checking segment and offset calculations, continue with [linker layout](linker-duzeni.md) to see how segments are arranged during the build. Read [startup and auxv](baslangic-ve-auxv.md) for kernel loading and execution before `main`.
 
-## Kaynaklar
+## Sources
 
 - [pyelftools — GitHub (Eli Bendersky)](https://github.com/eliben/pyelftools)
 - [fq — jq for binary formats](https://github.com/wader/fq)
 - [Binsider — Terminal ELF Analyzer (Orhun Parmaksız)](https://github.com/orhun/binsider)
 - [The Cerberus ELF Interface (Phrack #61)](http://phrack.org/issues/61/8.html)
-
 - [Linux v6.12: ELF loader validation](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c)

@@ -1,18 +1,19 @@
 ---
-title: "Sembol seçimi ve LD_PRELOAD ile fonksiyon kancalama"
+title: Symbol selection and function interposition with LD_PRELOAD
 ---
 
-# Sembol seçimi ve LD_PRELOAD ile fonksiyon kancalama
+# Symbol selection and function interposition with LD_PRELOAD
 
-Dinamik bağlı bir ELF dosyasında bir fonksiyon çağrıldığında, o fonksiyonun hangi paylaşımlı nesneden (`.so`) temin edileceğini dinamik yükleyicinin sembol arama kapsamı (`lookup scope`) belirler.
+For a call in a dynamically linked ELF, the dynamic linker's lookup scope determines which shared object (`.so`) supplies the function definition.
 
-Bu laboratuvar, aynı isimde (`secim`) bir fonksiyona sahip iki farklı paylaşımlı kütüphane hazırlar. `LD_PRELOAD` mekanizması kullanılarak ana programın ikili kodunda (`DT_NEEDED`) hiçbir değişiklik yapmadan, çağrı hedefinin nasıl yönlendirildiğini adım adım inceler.
+This laboratory creates two libraries defining the same function, `secim`. It uses `LD_PRELOAD` to redirect the call without changing the main executable's `DT_NEEDED` entries.
 
-## 1. Deney Kodlarının Hazırlanması
+## 1. Prepare the source files
 
-Laboratuvar için üç küçük kaynak dosya oluşturacağız: `liba.c`, `libb.c` ve `ana.c`.
+Create three small files: `liba.c`, `libb.c`, and `ana.c`.
 
-### Birinci Kütüphane: `liba.c`
+### First library: liba.c
+
 ```c
 #include <stdio.h>
 
@@ -21,7 +22,8 @@ int secim(void) {
 }
 ```
 
-### İkinci Kütüphane (Kancalama Kütüphanesi): `libb.c`
+### Second library: libb.c, the interposer
+
 ```c
 #include <stdio.h>
 
@@ -30,88 +32,89 @@ int secim(void) {
 }
 ```
 
-### Ana Program: `ana.c`
+### Main program: ana.c
+
 ```c
 #include <stdio.h>
 
-// Dışarıdan gelecek fonksiyon bildirimi
+// Declaration of an external function
 int secim(void);
 
 int main(void) {
-    printf("secim() fonksiyonu cagirildi, donus degeri: %d\n", secim());
+    printf("secim() called, return value: %d\n", secim());
     return 0;
 }
 ```
 
-## 2. Kütüphanelerin ve Ana Programın Derlenmesi
+## 2. Build the libraries and executable
 
-Konumdan Bağımsız Kod (PIC - Position Independent Code) bayrağıyla paylaşımlı kütüphaneleri ve ardından ana programı derleyin:
+Use position-independent code (`-fPIC`) for the shared libraries, then link the main program:
 
 ```bash
-# 1. Kütüphaneleri paylaşımlı nesne (.so) olarak derle:
+# 1. Build the libraries as shared objects (.so):
 gcc -Wall -Wextra -fPIC -shared liba.c -o liba.so
 gcc -Wall -Wextra -fPIC -shared libb.c -o libb.so
 
-# 2. Ana programı liba.so'ya bağlayarak derle:
-# -Wl,-rpath,. parametresi çalışma anında kütüphaneyi mevcut dizinde aramasını sağlar
+# 2. Link the main program against liba.so:
+# -Wl,-rpath,. adds the current directory to the runtime library search path
 gcc -Wall -Wextra ana.c -L. -la -Wl,-rpath,. -o ana
 ```
 
-## 3. Çalıştırma ve Karşılaştırma Deneyi
+## 3. Run and compare
 
-### Normal Çalıştırma:
-Ana programı doğrudan çalıştırın:
+### Normal execution
+
+Run the main program directly:
 
 ```bash
 ./ana
 ```
-Çıktı:
+
+Output:
+
 ```text
-secim() fonksiyonu cagirildi, donus degeri: 11
+secim() called, return value: 11
 ```
 
-Program `DT_NEEDED` girdisinde kayıtlı olan `liba.so` kütüphanesini yükledi ve oradaki `secim` fonksiyonunu çağırdı.
+The program loads `liba.so`, listed in `DT_NEEDED`, and calls its `secim` definition.
 
-### LD_PRELOAD ile Sembol Araya Girme (Interposition):
-Şimdi `libb.so` kütüphanesini `LD_PRELOAD` ortam değişkeniyle öne alarak çalıştırın:
+### Interposition with LD_PRELOAD
+
+Preload `libb.so` using the environment variable:
 
 ```bash
 LD_PRELOAD=./libb.so ./ana
 ```
-Çıktı:
+
+Output:
+
 ```text
-secim() fonksiyonu cagirildi, donus degeri: 22
+secim() called, return value: 22
 ```
 
-Bu deneyin normal, secure-execution olmayan glibc ortamında beklenen çıktıları sırasıyla `11` ve `22` olur. Ana programın `DT_NEEDED` girdisini değiştirmeden sembol seçimi değişmiştir.
+In a normal glibc environment outside secure-execution mode, expected outputs are 11 and 22 respectively. Symbol selection changes without modifying the main executable's `DT_NEEDED` entry.
 
-## 4. Dinamik Yükleyicinin Arama Sırasını İzlemek
+## 4. Trace dynamic linker lookup
 
-Dinamik yükleyicinin sembolü ararken izlediği adımları `LD_DEBUG=symbols` ile ayrıntılı olarak görebilirsiniz:
+Capture a log on Linux/glibc outside secure-execution mode:
 
 ```bash
-LD_DEBUG=symbols LD_PRELOAD=./libb.so ./ana 2>&1 | grep "symbol=secim"
+LD_DEBUG=symbols,bindings LD_PRELOAD=./libb.so ./ana >ana.stdout 2>ana.ld-debug
+grep -E 'symbol=secim|binding file.*secim' ana.ld-debug
 ```
 
-Çıktı:
-```text
-symbol=secim;  lookup in file=./libb.so [0]
-symbol=secim;  lookup in file=./liba.so [0]
-binding file ./ana to ./libb.so: normal symbol `secim`
-```
+No Linux linker log was measured during this revision. Compare `secim` lookup lines with the binding of the `ana` reference to the `libb.so` definition in your recording. PID, paths, and version formatting may differ. `symbols` reports lookup and `bindings` reports binding; `grep "symbol=secim"` alone does not show the binding line. Do not assume every remaining library in scope is searched after a definition is found.
 
-Yükleyici önce `LD_PRELOAD` listesindeki `libb.so` dosyasına bakmış, aranan sembolü orada bulduğu anda aramayı sonlandırmış ve ana programın GOT girdisini `libb.so` içindeki adrese bağlamıştır.
+## 5. AT_SECURE and -Bsymbolic limits
 
-## 5. Güvenlik Sınırları ve -Bsymbolic Korunması
+1. **AT_SECURE**: A setuid bit alone does not guarantee secure execution on every run. In this mode, glibc restricts preload paths, ignoring those containing slashes, with a narrow exception for setuid objects in standard directories. See [startup and auxv](../rehberler/baslangic-ve-auxv.md). This laboratory does not change privileges.
+2. **`-Bsymbolic`**: Binds a shared object's internal references to its own global definitions where available. The call **from the main program**, `ana → secim`, is outside that scope. Even if `liba.so` is rebuilt with the option, the expected result of `LD_PRELOAD=./libb.so ./ana` here remains 22. To test internal references, add another function in `liba` that calls `secim` ([GNU ld](https://sourceware.org/binutils/docs/ld/Options.html)).
 
-1. **AT_SECURE ve Yetkili İkililer**: Eğer `ana` programı `setuid` bayrağına sahip olsaydı (`sudo chmod +s ./ana`), çekirdek `AT_SECURE=1` bayrağı koyar ve glibc `LD_PRELOAD` değişkenini güvenlik nedeniyle **yok sayardı**.
-2. **Linker'da -Bsymbolic Kullanımı**: Bir kütüphane derlenirken `gcc -shared -Wl,-Bsymbolic` bayrağı verilirse, kütüphane içindeki fonksiyon çağrıları kendi içindeki tanımlara kilitlenir; dışarıdan `LD_PRELOAD` ile araya girilmesi engellenir.
+## Investigate further
 
-## İncelemeyi Derinleştir
+Return to [dynamic linking](../rehberler/dinamik-baglama.md) for GOT/PLT mechanics. Complete the [debug information laboratory](debug-bilgisi.md) to separate and reconnect symbols for a stripped binary.
 
-Dinamik bağlama ve GOT/PLT mekanizmalarının iç yapısını teorik olarak kavramak için [Dinamik bağlama](../rehberler/dinamik-baglama.md) rehberine dönün. Sembolleri ve hata ayıklama bilgilerini stripped dosyalardan ayrıştırmak için [Debug bilgisi laboratuvarı](debug-bilgisi.md) uygulamasını yapın.
-
-## Kaynaklar
+## Sources
 
 - [ld.so — Linux man-pages (man 8 ld.so)](https://man7.org/linux/man-pages/man8/ld.so.8.html)
 - [MaskRay: ELF interposition and -Bsymbolic](https://maskray.me/blog/2021-05-16-elf-interposition-and-bsymbolic)

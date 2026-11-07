@@ -1,134 +1,128 @@
 ---
-title: "ELF'i dosyadan belleğe takip etmek"
+title: Following ELF from file to memory
 ---
 
-# ELF'i dosyadan belleğe takip etmek
+# Following ELF from file to memory
 
-Linux ortamında çalıştırılabilir bir ikili dosyanın (`ELF` - Executable and Linkable Format) diskteki durağan baytlardan bellekte çalışan bir süreç görüntüsüne (process image) dönüşmesi, işletim sistemi çekirdeği ve dinamik yükleyicinin ortaklaşa yürüttüğü katı bir protokole dayanır.
+On Linux, an executable ELF (Executable and Linkable Format) file becomes a running process image through a protocol implemented jointly by the kernel and dynamic linker.
 
-Tersine mühendislikte sıkça düşülen ilk hata, analiz aracına (Ghidra, IDA veya IDA benzeri araçlar) güvenip doğrudan `main()` fonksiyonunu aramaktır. Oysa modern sistemlerde ikili dosya, önce çekirdeğin `execve` altyapısı, ardından dinamik yükleyici (`ld-linux.so`) tarafından işlenir. Dosyanın diskteki baytlarının hangi sanal adreslere, hangi izinlerle ve nasıl eşlendiğini anlamak, tüm statik ve dinamik analizin temel taşıdır.
+A common reverse engineering mistake is trusting an analysis tool such as Ghidra or IDA and immediately looking for `main()`. The binary first passes through the kernel's `execve` machinery and, when dynamically linked, the dynamic linker (`ld-linux.so`). Understanding which bytes are mapped to which virtual addresses, under which permissions, is the foundation for static and dynamic analysis.
 
-## 1. Segmentler ve Section'lar: İki Farklı Dünyanın Görünümü
+## 1. Segments and sections: two views
 
-Bir ELF dosyası iki farklı perspektiften okunabilir: **Bağlama (linking) görünümü** ve **Çalıştırma (execution) görünümü**.
+An ELF file can be read from two perspectives: its **linking view** and its **execution view**.
 
 ```text
 +-------------------------------------------------------+
-|                     ELF Header                        |
+| ELF header                                            |
 +-------------------------------------------------------+
-|             Program Header Table (Segments)           |  <-- Çekirdek (Kernel / Loader)
-|  - PT_LOAD (RX)  -> .text, .rodata                    |      Sanal belleğe neyin eşleneceğini
-|  - PT_LOAD (RW)  -> .data, .bss                       |      belirler. Section'ları bilmez.
-|  - PT_DYNAMIC    -> .dynamic                          |
-|  - PT_INTERP     -> "/lib64/ld-linux-x86-64.so.2"     |
+| Program header table: segments                        | <-- Kernel / loader
+|   PT_LOAD (RX) -> .text, .rodata                       |     Determines mappings
+|   PT_LOAD (RW) -> .data, .bss                         |     and permissions.
+|   PT_DYNAMIC   -> .dynamic                            |
+|   PT_INTERP    -> "/lib64/ld-linux-x86-64.so.2"         |
 +-------------------------------------------------------+
-|                    Section'lar                        |
-|  - .text (Kod)                                        |  <-- Linker / Debugger / Tersine Müh.
-|  - .rodata (Salt okunur veri)                         |      Mantıksal parçaları ve sembolleri
-|  - .data (Başlatılmış veri)                           |      ayırt etmek için kullanılır.
-|  - .bss (Sıfırlanmış veri)                            |
+| Sections                                              |
+|   .text   : Code                                      | <-- Linker / debugger
+|   .rodata : Read-only data                            |     Logical organization
+|   .data   : Initialized data                          |     and symbols.
+|   .bss    : Zero-initialized data                      |
 +-------------------------------------------------------+
-|              Section Header Table (Sections)          |  <-- Stripped olunca tamamen silinebilir!
+| Section header table                                  | <-- May be removed
 +-------------------------------------------------------+
 ```
 
-### Program Header Tablosu (Segments)
-Çekirdeğin `fs/binfmt_elf.c` modülü içindeki `load_elf_binary()` fonksiyonu dosyayı belleğe alırken Section Header tablosunu **asla okumaz**. Çekirdek yalnızca `Program Header` tablosuna (Phdr) bakar:
-- **`PT_LOAD`**: Sanal belleğe doğrudan eşlenecek bellek aralıklarını tanımlar. İzinleri (`PF_R`, `PF_W`, `PF_X`) bellidir.
-- **`PT_INTERP`**: Dinamik yükleyicinin disk yolunu (`/lib64/ld-linux-x86-64.so.2`) içerir.
-- **`PT_DYNAMIC`**: Dinamik sembol bağlama ve relocation tablolarının konumunu verir.
-- **`PT_GNU_STACK`**: Yığının çalıştırılabilir (`RWX`) olup olmadığını belirler (NX/DEP güvenliği).
-- **`PT_GNU_RELRO`**: Yükleme sonrasında salt-okunur yapılacak bellek segmentini tanımlar (Full/Partial RELRO).
+### Program header table: segments
 
-### Section Header Tablosu (Sections)
-Linker (`ld`, `lld`) ve hata ayıklayıcılar (`gdb`) tarafından kullanılır. `.text`, `.data`, `.symtab`, `.strtab` gibi mantıksal bölümler buradadır. Bir saldırgan ya da zararlı yazılım yazarının Section Header tablosunu sıfırlaması veya bozması (stripping / section mangling), dosyanın çalışmasını **kesinlikle engellemez**. Bu yüzden sadece section adlarına güvenen bir analiz motoru kolaylıkla yanıltılabilir.
+The kernel's `load_elf_binary()` in `fs/binfmt_elf.c` uses program headers for normal segment loading decisions. A section table is unnecessary for ordinary loading; ELF extensions such as extended program-header numbering require separate examination:
 
-## 2. readelf ile Başlık ve Segment İncelemesi
+- **`PT_LOAD`**: Memory ranges to map, with `PF_R`, `PF_W`, and `PF_X` permissions.
+- **`PT_INTERP`**: The dynamic linker's file path, such as `/lib64/ld-linux-x86-64.so.2`.
+- **`PT_DYNAMIC`**: Information locating dynamic linking and relocation structures.
+- **`PT_GNU_STACK`**: The executable-stack request, relevant to NX/DEP.
+- **`PT_GNU_RELRO`**: A region to make read-only after relocation, relevant to partial/full RELRO.
 
-Kendi derlediğin bir programın mimarisini ve segmentlerini terminalden adım adım incele:
+### Section header table: sections
+
+Linkers (`ld`, `lld`) and debuggers (`gdb`) use logical sections such as `.text`, `.data`, `.symtab`, and `.strtab`. Clearing or corrupting the section header table through stripping or section mangling may leave a file runnable if other loading conditions hold. An analyzer relying only on section names can therefore be misled.
+
+## 2. Inspecting headers and segments with readelf
+
+Inspect the architecture and segments of a program you compiled:
 
 ```bash
 readelf -h ./ornek
 readelf -lW ./ornek
 ```
 
-`-lW` (geniş format) çıktısı segmentlerin bellek yerleşimini açıkça sergiler:
+`-lW` displays segment types, file and virtual addresses, `FileSiz`, `MemSiz`, permissions, and alignment. No Linux `readelf` dump was generated during this revision, so no fixed-address output is presented. Save a full dump from your own build. An ELF64 program header is 56 bytes; compare the table size with its record count.
+
+### FileSiz versus MemSiz: the .bss area
+
+For `PT_LOAD`, `p_memsz > p_filesz` means a zero-filled memory tail without corresponding file bytes; ordinary `.bss` requires this. In Linux v6.12 `elf_load()`, `padzero()` clears the tail of the last file-backed page, and `vm_brk_flags` provides the remaining full pages as zeroed anonymous memory. This difference alone is not evidence of packing.
+
+## 3. Converting a file offset to a memory address
+
+A `PT_LOAD` segment connects a byte's offset on disk to its virtual address in the process.
+
+The formula is:
 
 ```text
-Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
-PHDR           0x000040 0x0000000000000040 0x0000000000000040 0x0002d0 0x0002d0 R   0x8
-INTERP         0x000310 0x0000000000000310 0x0000000000000310 0x00001c 0x00001c R   0x1
-LOAD           0x000000 0x0000000000000000 0x0000000000000000 0x000800 0x000800 R   0x1000
-LOAD           0x001000 0x0000000000001000 0x0000000000001000 0x000450 0x000450 R E 0x1000
-LOAD           0x002000 0x0000000000002000 0x0000000000002000 0x000180 0x000180 RW  0x1000
-LOAD           0x002e00 0x0000000000003e00 0x0000000000003e00 0x000200 0x000840 RW  0x1000
-DYNAMIC        0x002e10 0x0000000000003e10 0x0000000000003e10 0x0001e0 0x0001e0 RW  0x8
+Runtime virtual address (VMA) = Load bias + p_vaddr + (File offset - p_offset)
 ```
 
-### FileSiz ve MemSiz Arasındaki Fark: .bss Alanı
-Yukarıdaki son `LOAD` segmentine dikkat et:
-- `FileSiz`: `0x000200` bayt
-- `MemSiz`: `0x000840` bayt
+Where:
 
-`MemSiz > FileSiz` durumu, aradaki `0x640` baytlık alanın diskte yer kaplamadığını, çekirdek tarafından bellekte ayrılıp sıfırlandığını (`zero-initialized`) gösterir. Bu alan C programındaki global başlatılmamış değişkenlerin (`.bss`) yeridir. Çekirdek `fs/binfmt_elf.c` içinde `padzero()` çağrısı yaparak diskten okunmayan bu kısmı sıfır baytlarla doldurur. Bu durum tek başına bir packing/obfuscation belirtisi değil, ELF standart formatının doğal bir parçasıdır.
-
-## 3. Dosya Offset'inden Bellek Adresine Dönüşüm
-
-Statik analizde bir baytın diskteki offset'i ile sürecin adres uzayındaki sanal adresi (VMA) arasındaki ilişki `PT_LOAD` segmenti üzerinden kurulur.
-
-Formül şöyledir:
-
-```text
-Çalışma Sanal Adresi (VMA) = Load Bias + p_vaddr + (Dosya Offset'i - p_offset)
-```
-
-Burada:
-- **`p_offset`**: Segmentin dosyadaki başlangıç bayt offset'i.
-- **`p_vaddr`**: Segmentin ELF başlığında belirtilen hedef sanal adresi.
-- **`Load Bias`**: ASLR (Address Space Layout Randomization) veya PIE (Position Independent Executable) nedeniyle dosyanın belleğe yüklendiği taban adres kaymasıdır. Non-PIE ikililerde genellikle `0`'dır; PIE ikililerde çekirdek tarafından rastgele belirlenir.
+- **`p_offset`** is the segment's starting file offset.
+- **`p_vaddr`** is the virtual address recorded for the segment in the ELF file.
+- **Load bias** is the base-address adjustment applied when mapping the file, including ASLR/PIE relocation. It is usually 0 for non-PIE executables; PIE loading commonly selects a randomized base.
 
 > [!WARNING]
-> Bu formül yalnızca `FileSiz` aralığında kalan baytlar için geçerlidir. `MemSiz` içindeki sıfırlanmış `.bss` bölgesinin diskte bir karşılığı (offset'i) bulunmaz.
+> This formula applies only to bytes within `FileSiz`. The zero-filled `.bss` part of `MemSiz` has no corresponding file offset.
 
-## 4. Çalışma Anında /proc/PID/maps Doğrulaması
+## 4. Checking runtime mappings with /proc/PID/maps
 
-Bir sürecin belleğe gerçekten nasıl eşlendiğini görmek için `/proc/<pid>/maps` dosyasını okuyun:
+Read `/proc/<pid>/maps` to see actual process mappings:
 
 ```bash
-cat /proc/self/maps
+# Use the PID printed by the target:
+PID=4821
+cat /proc/"$PID"/maps
 ```
 
-Örnek çıktı satırları:
+The following are **schematic mapping lines**, not a captured execution. `cat /proc/self/maps` reads the `cat` process's mappings, not your target's:
 
 ```text
 55e4b6000000-55e4b6001000 r--p 00000000 103:02 12345678  /usr/bin/ornek
 55e4b6001000-55e4b6002000 r-xp 00001000 103:02 12345678  /usr/bin/ornek
 55e4b6002000-55e4b6003000 rw-p 00002000 103:02 12345678  /usr/bin/ornek
-55e4b6003000-55e4b6004000 rw-p 00000000 00:00 0         [anon]
+55e4b6003000-55e4b6004000 rw-p 00000000 00:00 0
 7ffc39f0b000-7ffc39f2c000 rw-p 00000000 00:00 0         [stack]
 7ffc39fdd000-7ffc39fe1000 r--p 00000000 00:00 0         [vvar]
 7ffc39fe1000-7ffc39fe3000 r-xp 00000000 00:00 0         [vdso]
 ```
 
-Her sütunun kesin teknik anlamı:
-1. **Adres Aralığı**: Sayfa hizalı (genellikle 4KB - `0x1000`) başlangıç ve bitiş sanal adresi.
-2. **İzinler**: `r` (read), `w` (write), `x` (execute), `p` (private/CoW) veya `s` (shared).
-3. **Ofset**: Dosyanın hangi ofsetinden itibaren belleğe eşlendiği.
-4. **Cihaz & Inode**: Dosyanın bulunduğu blok cihaz ve dosya sistemi inode numarası.
-5. **Dosya Yolu**: Eşlemenin bağlı olduğu dosya. `[anon]` ifadesi, diskte bir dosyaya dayanmayan, doğrudan `mmap` ile ayrılmış anonim belleği ifade eder (örneğin heap veya `.bss` uzantısı).
+The columns mean:
 
-## 5. Dinamik Bağlama ve Giriş Adresi (Entry Point)
+1. **Address range**: Page-aligned start and end virtual addresses; pages are commonly 4 KB (`0x1000`).
+2. **Permissions**: `r` (read), `w` (write), `x` (execute), and `p` (private/CoW) or `s` (shared).
+3. **Offset**: The backing file offset at which the mapping starts.
+4. **Device and inode**: The backing file's device and filesystem inode.
+5. **Path**: The backing file. Unnamed anonymous mappings usually have an empty path. Since Linux 5.17, named private anonymous mappings may appear as `[anon:name]`. `maps` does not describe section boundaries or record code execution.
 
-ELF başlığındaki `e_entry` alanı doğrudan `main` adresini işaret etmez.
+## 5. Dynamic linking and the entry point
 
-Dinamik bağlı bir ELF dosyasında:
-1. Çekirdek ikiliyi yükler ve `PT_INTERP` segmentini okur.
-2. Çekirdek, kontrolü doğrudan ikiliye değil, dinamik yükleyiciye (`/lib64/ld-linux-x86-64.so.2`) devreder.
-3. Dinamik yükleyici bağımlı kütüphaneleri (`DT_NEEDED`) yükler, relocation işlemlerini çözer.
-4. Kontrol ikilinin `e_entry` adresine (`_start`) devredilir.
-5. `_start` (glibc `sysdeps/x86_64/start.S`) fonksiyonu, yığındaki `argc`, `argv`, `envp` ve `auxv` vektörlerini hazırlar ve `__libc_start_main` üzerinden nihayet `main` fonksiyonunu çağırır.
+The ELF header's `e_entry` field does not point directly to `main`.
 
-GDB'de programın ilk anını yakalamak için `break main` yerine `starti` komutunu kullanın:
+For a dynamically linked ELF:
+
+1. The kernel loads the executable and reads `PT_INTERP`.
+2. It transfers control to the dynamic linker, such as `/lib64/ld-linux-x86-64.so.2`.
+3. The linker loads dependencies (`DT_NEEDED`) and applies relocations.
+4. Control transfers to the executable's `e_entry` address (`_start`).
+5. `_start` (glibc `sysdeps/x86_64/start.S`) reads arguments from the kernel-prepared stack and ultimately reaches `main` through `__libc_start_main`.
+
+In GDB, use `starti` rather than `break main` to catch the initial instruction:
 
 ```bash
 gdb -q ./ornek
@@ -137,17 +131,17 @@ gdb -q ./ornek
 (gdb) x/5i $rip
 ```
 
-`starti`, ilk işlemci komutunda durur. Dinamik bağlı ikililerde `$rip` ilk anda `ld-linux.so` içindedir; statik ikililerde ise doğrudan programın `_start` adresindedir.
+`starti` stops at the first machine instruction. For a dynamically linked executable, `$rip` initially points into `ld-linux.so`; for a static executable it points into the program's own startup code.
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Dosya ve bellek eşleme temellerini kavradıktan sonra, program header ve section tablolarını kodla doğrulamak için [ELF parser ve adresler](elf-parser-ve-adresler.md) rehberine geçin. Bellek haritasının linker tarafından nasıl oluşturulduğunu görmek için [Linker düzeni](linker-duzeni.md) sayfasını, sürecin ayağa kalkışındaki çekirdek-kullanıcı alanı el sıkışmasını anlamak için ise [Başlangıç ve auxv](baslangic-ve-auxv.md) rehberini inceleyin.
+Continue with [ELF parsers and addresses](elf-parser-ve-adresler.md) to validate program headers and address ranges in code. Read [linker layout](linker-duzeni.md) for the build-time arrangement and [startup and auxv](baslangic-ve-auxv.md) for the kernel/user-space handoff.
 
-## Kaynaklar
+## Sources
 
 - [ELF — Linux man-pages (man 5 elf)](https://man7.org/linux/man-pages/man5/elf.5.html)
 - [execve — Linux man-pages (man 2 execve)](https://man7.org/linux/man-pages/man2/execve.2.html)
 - [proc_pid_maps — Linux man-pages (man 5 proc_pid_maps)](https://man7.org/linux/man-pages/man5/proc_pid_maps.5.html)
-- [System V AMD64 ABI — Draft 0.99.6](https://refspecs.linuxfoundation.org/elf/x86_64-abi-0.99.pdf)
-- [Linux Kernel: fs/binfmt_elf.c implementation](https://github.com/torvalds/linux/blob/master/fs/binfmt_elf.c)
-- [MaskRay: All about -fPIC and -fPIE](https://maskray.me/blog/2021-05-09-all-about-fpic-and-fpie)
+- [x86-64 psABI](https://gitlab.com/x86-psABIs/x86-64-ABI)
+- [Linux Kernel: fs/binfmt_elf.c implementation](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c)
+- [GCC: Code Generation Options — PIC/PIE](https://gcc.gnu.org/onlinedocs/gcc/Code-Gen-Options.html)

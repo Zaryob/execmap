@@ -1,105 +1,73 @@
 ---
-title: "perf ile yürütme analizi ve donanımsal izleme"
+title: Execution analysis and hardware tracing with perf
 ---
 
-# perf ile yürütme analizi ve donanımsal izleme
+# Execution analysis and hardware tracing with perf
 
-Tersine mühendislikte bir ikili dosyanın statik disasm çıktısı, kodun çalışma anındaki gerçek davranışını her zaman yansıtmaz. Karmaşık dallanmalar, dinamik fonksiyon göstericileri (function pointers) ve dolaylı çağrılar (indirect calls) içeren bir programın en çok hangi kod yollarını (hotspots) tükettiğini anlamanın yolu çalışma anı profillemesidir.
+Static disassembly does not always reveal a binary's actual runtime behavior. Profiling helps identify hot paths in programs with complex branches, dynamic function pointers, and indirect calls.
 
-Linux çekirdeğinin resmi performans alt sistemi olan **`perf`**, işlemcinin donanımsal Performans İzleme Birimini (PMU) ve çekirdek izleme noktalarını (tracepoints) kullanarak uygulamayı neredeyse sıfır gecikmeyle (overhead) nano-saniye hassasiyetinde izler.
+Linux **perf** collects PMU counter and tracepoint data. Cost, time resolution, and coverage depend on the event type, CPU, kernel, perf build, and buffer settings. This guide concerns Linux perf; the Intel PT section also requires supported Intel hardware.
 
-## 1. Donanımsal Örnekleme (Sampling) Mantığı
+## 1. Hardware sampling
 
-`perf`, programı her komutta durdurup yavaşlatmak yerine **örnekleme (sampling)** yöntemini kullanır:
+Rather than stopping at every instruction, perf can use **sampling**.
 
-```text
-[İşlemci PMU Sayacı: Her 1.000.000 CPU Döngüsünde (cycles) Bir Kesme Üret]
-      |
-      +---> Kesme anındaki Program Counter (%rip) kaydedilir.
-      |
-      +---> Çağrı yığını (Call Stack / Frame Pointer) kaydedilir.
-      |
-      +---> İşlemci yürütmeye devam eder (Süreçte neredeyse hiç yavaşlama olmaz).
-```
+Samples can be triggered after a given number of PMU events (`-c` period), or at a requested target frequency (`-F`). Records include the program counter and optionally a call chain. “Every million cycles” is not a universal default; the kernel may limit sampling rates.
 
-### Neden 99 Hz?
-Örnekleme frekansı seçilirken sıkça `perf record -F 99` kullanılır. Linux çekirdek zamanlayıcısı (kernel timer tick) 100 Hz, 250 Hz veya 1000 Hz frekansta çalışır. Tam 100 Hz seçildiğinde örnekleme zamanlayıcı vuruşlarıyla rezonansa girerek veriyi yanıltabilir; 99 Hz bu döngüyü kırarak saf ve tarafsız dağılım sağlar.
+### Why 99 Hz?
 
-## 2. perf record ve perf report İş Akışı
+`-F 99` can be a low-cost starting point. Avoiding round periodic frequencies may reduce some aliasing risks, but it does not guarantee unbiased sampling. Compare runtime, sample count, throttling/loss warnings, and repeated captures at other frequencies.
 
-Hedef bir programın yürütme profilini kaydetmek için:
+## 2. The perf record / perf report workflow
+
+Record a target's execution profile:
 
 ```bash
 perf record -F 99 -g -- ./ornek
 ```
 
-Parametreler:
-- `-F 99`: Saniyede çekirdek başına 99 örnek alır.
-- `-g`: Çağrı grafiğini (call graph / stack unwinding) kaydeder.
-- `--`: İzlenecek komut ve parametreleri.
+Options:
 
-Kayıt tamamlandığında oluşan `perf.data` dosyasını terminalde görselleştirmek için:
+- `-F 99`: Request a target sampling frequency of 99 Hz for the selected event; measure the achieved rate.
+- `-g`: Record call chains for stack unwinding.
+- `--`: Separate perf options from the target command and arguments.
+
+After capture, inspect `perf.data` in the terminal:
 
 ```bash
 perf report -g 'graph,0.5,caller'
 ```
 
-Örnek rapor görünümü:
+No perf run was performed in this session, so no numerical report is presented. Save your report with `perf report --stdio`. `[.]` denotes user-space symbols and `[k]` kernel symbols. `Self` is the function's own share of the selected event, which need not measure wall-clock time. `Children` can include cumulative descendant contributions, causing overlap between rows. `caller` indicates caller orientation; do not read that tree as a list of callees. Call-chain accuracy depends on frame-pointer/DWARF methods and the build.
 
-```text
-Samples: 2K of event 'cycles', Event count (approx.): 1823901230
-Children      Self  Command  Shared Object      Symbol
-........  ........  .......  .................  ..........................
-  92.40%    88.10%  ornek    ornek              [.] hesapla_karmasik
-            |
-            ---hesapla_karmasik
-               |
-                --4.30%-- yardimci_algoritma
-   5.20%     5.10%  ornek    libc.so.6          [.] __memmove_avx_unaligned
-   2.40%     0.00%  ornek    [kernel.kallsyms]  [k] __x64_sys_read
-```
+## 3. Intel Processor Trace
 
-Bu raporda:
-- `[.]`: Kullanıcı alanındaki (userspace) bir sembolü gösterir.
-- `[k]`: Çekirdek alanındaki (kernel) bir fonksiyonu gösterir.
-- `Self`: Zamanın doğrudan bu fonksiyonun kendi komutlarında harcandığını gösterir.
-- `Children`: Bu fonksiyonun alt fonksiyonlarıyla birlikte tükettiği toplam süreyi gösterir.
+Ordinary sampling provides a statistical view, not a record of every instruction. On supported Intel CPUs, **Intel PT** produces compressed control-flow and timing packets. A decoder can reconstruct instruction flow using the correct executable bytes; this does not mean every instruction has its own record or timestamp.
 
-## 3. En Üst Düzey Donanımsal İzleme: Intel PT (Processor Trace)
-
-Standart örnekleme yalnızca istatistiksel bir tahmin sunar; her talimatı tek tek kaydetmez. Ancak modern Intel işlemcilerde bulunan **Intel PT (Processor Trace)** donanımı, programın çalıştırdığı **istisnasız her bir dallanmayı ve komutu** donanımsal olarak kaydeder!
-
-Intel PT ile izleme başlatmak:
+Start Intel PT capture:
 
 ```bash
-# Sadece kullanıcı alanındaki (//u) dallanmaları donanımsal buffer'a yaz
+# Record only user-space (//u) branches in the hardware buffer
 perf record -e intel_pt//u -- ./ornek
 ```
 
-Kaydedilen ham donanım izini komut komut disasm dökümüne çevirmek:
+Decode the hardware trace into an instruction-oriented disassembly:
 
 ```bash
 perf script --insn-trace --xed
 ```
 
-Örnek Intel PT çıktısı:
+`--xed` requires perf built with Intel XED support; check your version's `perf script -h`. Syntax and output fields depend on perf version. No executed PT dump is presented here.
 
-```text
-ornek  1234 [001]  0.000123:  instruction:   0x55e1a2001150  push %rbp
-ornek  1234 [001]  0.000124:  instruction:   0x55e1a2001151  mov %rsp, %rbp
-ornek  1234 [001]  0.000125:  instruction:   0x55e1a2001154  cmp $0x10, %rax
-ornek  1234 [001]  0.000126:  instruction:   0x55e1a2001158  je 0x55e1a2001180  => Dallanma Gerçekleşti!
-```
+Intel PT can observe control flow without a ptrace relationship or conventional software breakpoints. It still has performance effects and can generate large AUX data volumes. Full buffers, lost trace, filters, and PSB synchronization can leave gaps. Providing the correct code image is especially difficult for JIT or self-modifying code. Decoding the flow does not record all register/memory state and is not deterministic execution replay. See the [Linux v6.12 perf-intel-pt documentation](https://github.com/torvalds/linux/blob/v6.12/tools/perf/Documentation/perf-intel-pt.txt).
 
-Intel PT, anti-debugging mekanizmalarına (`ptrace` kontrolleri) yakalanmadan, kod üzerinde hiçbir yavaşlama veya breakpoint izi bırakmadan sürecin tüm akışını yeniden oynatmayı (execution replay) mümkün kılar.
+## Investigate further
 
-## İncelemeyi Derinleştir
+Continue with [events with eBPF](ebpf-ile-olaylar.md) for syscall and user-function observation. Read [observer effects](analiz-aracinin-etkisi.md) to understand how analysis tools can be detected by a target.
 
-Çalışma anı olaylarını sistem çağrıları ve kullanıcı alanı kancalarıyla izlemek için [eBPF ile olaylar](ebpf-ile-olaylar.md) rehberine geçin. Analiz araçlarının hedef yazılım tarafından nasıl algılandığını öğrenmek için [Analiz aracının etkisi](analiz-aracinin-etkisi.md) konusunu okuyun.
-
-## Kaynaklar
+## Sources
 
 - [Linux Kernel: perf security documentation](https://docs.kernel.org/admin-guide/perf-security.html)
-- [Intel PT Documentation — Linux Kernel](https://github.com/torvalds/linux/blob/master/tools/perf/Documentation/perf-intel-pt.txt)
+- [Intel PT Documentation — Linux Kernel](https://github.com/torvalds/linux/blob/v6.12/tools/perf/Documentation/perf-intel-pt.txt)
 - [Brendan Gregg: Linux perf Examples](https://www.brendangregg.com/perf.html)
 - [Brendan Gregg: Flame Graphs](https://www.brendangregg.com/flamegraphs.html)

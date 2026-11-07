@@ -1,97 +1,88 @@
 ---
-title: "Çalışma anı izlerini yorumlamak ve adli bilişim metodolojisi"
+title: Interpreting runtime traces and forensic methodology
 ---
 
-# Çalışma anı izlerini yorumlamak ve adli bilişim metodolojisi
+# Interpreting runtime traces and forensic methodology
 
-Tersine mühendislik ve ikili dosya analizinde en tehlikeli yanılgı, elde edilen tek bir veriyi veya araç çıktısını nihai gerçek sanmaktır. `strace` günlüğündeki bir satır, `gdb` içindeki bir yazmaç değeri veya `perf` çıktısındaki bir oran; doğru metodoloji ve bağlamla birleştirilmediğinde analisti yanlış sonuçlara sürükler.
+A dangerous mistake in binary analysis is treating a single observation or tool output as the final truth. A line in a `strace` log, a register value in `gdb`, or a percentage in `perf` can lead to the wrong conclusion without context and a sound method.
 
-Başarılı bir tersine mühendislik süreci, doğa bilimlerindeki gibi **hipotez kurma, yanlışlanabilirlik (falsifiability) ve bağımsız kaynaklarla doğrulama** ilkelerine dayanmalıdır.
+Reverse engineering benefits from the principles of **hypothesis formation, falsifiability, and independent validation**.
 
-## 1. Temel Analiz Yanılgıları ve Tuzaklar
+## 1. Common analytical traps
 
-Analistlerin en sık düştüğü bilişsel ve metodolojik hatalar:
+Watch for these methodological errors:
 
-```text
-+-----------------------------------+---------------------------------------------------------+
-| Yaygın Yanılgı                    | Teknik Gerçeklik                                        |
-+-----------------------------------+---------------------------------------------------------+
-| "mprotect ile bir bellek RX oldu, | Bellek sayfasının çalıştırılabilir izne geçmesi, orada |
-|  demek ki burada kod çalıştırıldı"| kesinlikle kod yürütüldüğünü kanıtlamaz. Kodun o adrese |
-|                                   | sıçradığı (EIP/RIP) bağımsız olarak doğrulanmalıdır.    |
-+-----------------------------------+---------------------------------------------------------+
-| "perf kaydında bu fonksiyona ait  | Örnekleme tabanlı bir araç (sampling), çok kısa süren   |
-|  hiç örnek yok, demek ki çağrılmadı" veya nadir tetiklenen kod yollarını ıskalayabilir.     |
-|                                   | Yokluk kanıtı, kanıtın yokluğu değildir.               |
-+-----------------------------------+---------------------------------------------------------+
-| "İkili dosyada '/bin/sh' dizesi   | Dizenin ikili içinde bulunması çağrıldığı anlamına       |
-|  var, demek ki kabuk açıyor"      | gelmez. Ölü bir veri bloğu veya analizciyi yanıltmak   |
-|                                   | için yerleştirilmiş sahte bir tuzak (decoy) olabilir.   |
-+-----------------------------------+---------------------------------------------------------+
-```
+- **“mprotect made the region RX, so code ran there.”** Execute permission is not an execution record. Control transfer to that address must be verified separately.
+- **“There is no perf sample, so the function was not called.”** Sampling can miss brief or rare execution. Absence of evidence is not evidence of absence.
+- **“The binary contains `/bin/sh`, so it launches a shell.”** A string may be dead data or a decoy. Verify its consuming code path and the actual call.
 
-## 2. Çoklu Telemetri Korelasyonu (Cross-Correlation)
+## 2. Correlating multiple telemetry sources
 
-Güvenilir bir bulguya ulaşmak için tek bir araca değil, en az iki farklı katmandan gelen bağımsız telemetrinin kesişimine bakılmalıdır:
+For a reliable finding, look for agreement between independent observations from at least two layers:
 
 ```text
-               +----------------------------------+
-               |        Hipotez: Süreç           |
-               |   Bellek İçi Kod Yürütüyor      |
-               +----------------------------------+
-                                |
-        +-----------------------+-----------------------+
-        |                                               |
-        v                                               v
-[Statik / Bellek Analizi]                     [Dinamik Olay İzleme]
-/proc/<pid>/maps'te dosyaya dayanmayan        eBPF ile mmap/mprotect
-anonim bir 'r-xp' sayfası bulundu mu?         olayları yakalandı mı?
-        |                                               |
-        +-----------------------+-----------------------+
-                                |
-                                v
-               [Donanımsal Yürütme Kanıtı]
-               Intel PT veya perf örneği, RIP'in
-               gerçekten o sayfaya sıçradığını
-               kaydetti mi?
-                                |
-                                v
-                      [KESİNLEŞMİŞ KANIT]
++----------------------------------+
+              | Hypothesis: the process executes |
+              | code created in memory           |
+              +----------------------------------+
+                               |
+        +----------------------+----------------------+
+        |                                             |
+        v                                             v
+[Static / memory analysis]                 [Dynamic event observation]
+Is an anonymous executable                Were mmap/mprotect events
+mapping visible in /proc/<pid>/maps?       recorded with eBPF?
+        |                                             |
+        +----------------------+----------------------+
+                               |
+                               v
+                [Hardware execution evidence]
+                Did Intel PT or a perf sample
+                record RIP in the relevant page?
+                               |
+                               v
+                [A finding with a defined scope]
 ```
 
-## 3. Adli Bilişim Metodolojisi: Adım Adım Analiz Protokolü
+## 3. A step-by-step forensic workflow
 
-Bir ikili dosya incelenirken takip edilmesi gereken standart protokol:
+Use the following analysis protocol:
 
-### Adım 1: İzole Edilmiş Temiz Ortam
-Analiz her zaman ağ bağlantısı kesilmiş, anlık görüntüsü (snapshot) alınmış temiz bir sanal makinede veya konteynerde yürütülmelidir.
+### Step 1: a clean, isolated environment
 
-### Adım 2: Statik Envanter ve Sağlama Toplamı (Hashing)
-Dosyanın SHA-256 özeti alınarak kimliği sabitlenir. ELF başlığı, segmentler, mimari ve dış bağımlılıklar çıkarılır:
+Analyze untrusted binaries in a clean VM or container with an appropriate isolation policy, disconnected networking where required, and a saved baseline or snapshot.
+
+### Step 2: static inventory and hashing
+
+Record the file's SHA-256 hash to establish identity. Extract its ELF header, segments, architecture, and external dependencies:
+
 ```bash
 sha256sum ./supheli_ikili
 readelf -h -lW ./supheli_ikili
 ```
 
-### Adım 3: Pasif Dinamik Gözlem (Çekirdek Düzeyi)
-Süreci durdurup kancalamadan, çekirdek düzeyindeki araçlarla (`bpftrace`, `perf`) ilk çalıştırma davranışı izlenir:
-- Hangi sistem çağrılarını yapıyor?
-- Dosya sisteminde nereye yazıyor?
-- Ağ soketi açmaya çalışıyor mu?
+### Step 3: kernel-level observation
 
-### Adım 4: Aktif Hata Ayıklama ve Hipotez Doğrulama
-Pasif gözlemde şüpheli bulunan fonksiyonlar ve bellek adresleri GDB ile hedeflenir. Kesme noktaları konularak parametreler ve dönüş değerleri adım adım incelenir.
+Use `bpftrace` and `perf` for initial observations. Record probe types, sampling and loss limits, and observation cost. Account for the possibility that a uprobe inserts a breakpoint at the target instruction:
 
-### Adım 5: Bulguların Raporlanması
-Ulaşılan her iddia (örneğin "bu ikili dosya bellek enjeksiyonu yapmaktadır"), sistem günlüğü, bellek adresi ve komut çıktısıyla desteklenerek belgelenir.
+- Which system calls occur?
+- Where does the process write in the filesystem?
+- Does it attempt to open network sockets?
 
-## İncelemeyi Derinleştir
+### Step 4: active debugging and hypothesis testing
 
-Bu metodolojinin ilk adımını C kodu ve `mprotect` sistem çağrısıyla sınamak için [Bellek izinleri laboratuvarı](../laboratuvarlar/bellek-izinleri.md) sayfasına dönün. Derleyici optimizasyonlarının analiz üzerindeki yanıltıcı etkisini görmek için [Derleme farkları laboratuvarı](../laboratuvarlar/derleme-farklari.md) uygulamasını tamamlayın.
+Target suspicious functions and addresses with GDB. Set breakpoints and examine parameters and return values step by step.
 
-## Kaynaklar
+### Step 5: reporting findings
+
+Document each claim, such as “this binary performs memory injection,” together with supporting logs, memory addresses, and command output.
+
+## Investigate further
+
+Return to the [memory permissions laboratory](../laboratuvarlar/bellek-izinleri.md) to test these distinctions using C and `mprotect`. Complete the [compiler differences laboratory](../laboratuvarlar/derleme-farklari.md) to see how optimization can mislead analysis.
+
+## Sources
 
 - [Brendan Gregg: Systems Performance: Enterprise and the Cloud](https://www.brendangregg.com/systems-performance-2nd-edition-book.html)
 - [Linux man-pages: proc_pid_status](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html)
-- [The Science of Binary Analysis (CMU SEI)](https://insights.sei.cmu.edu/blog/binary-analysis/)
 - [NIST Special Publication 800-86: Guide to Integrating Forensic Techniques into Incident Response](https://csrc.nist.gov/publications/detail/sp/800-86/final)

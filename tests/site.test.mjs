@@ -17,11 +17,11 @@ async function walk(dir) {
 const htmlFiles = (await walk(root)).filter(file => file.endsWith('.html'));
 
 test('all content is published with one title, a main landmark and navigation', async () => {
-  assert.equal(pages.length, 22);
-  assert.equal(htmlFiles.length, 26);
+  assert.equal(pages.length, 25);
+  assert.equal(htmlFiles.length, 29);
   for (const file of htmlFiles) {
     const { document } = parseHTML(await readFile(file, 'utf8'));
-    assert.equal(document.documentElement.lang, 'tr', file);
+    assert.equal(document.documentElement.lang, 'en', file);
     assert.equal(document.querySelectorAll('h1').length, 1, file);
     assert.equal(document.querySelectorAll('main').length, 1, file);
     assert.ok(document.querySelector('#main'), file);
@@ -55,8 +55,8 @@ test('every internal page, fragment, download, script and stylesheet exists', as
   }
 });
 
-test('all 21 reading pages are searchable, including code and cited resources', () => {
-  assert.equal(index.length, 21);
+test('all 24 reading pages are searchable, including code and cited resources', () => {
+  assert.equal(index.length, 24);
   for (const page of pages.filter(page => page.id !== 'index')) {
     const hit = index.find(entry => entry.title === page.title);
     assert.ok(hit, page.id);
@@ -74,22 +74,25 @@ test('the suite search adapter exposes full text, content language and baseurl l
   assert.equal(shared.length, index.length);
   for (const record of shared) {
     assert.equal(record.type, 'execmap/');
-    assert.equal(record.lang, 'tr');
+    assert.equal(record.lang, 'en');
     assert.ok(record.url.startsWith(`${base}/`));
     assert.equal(record.text, index.find(page => page.url === record.url).text);
   }
   assert.ok(shared.some(record => record.text.includes('pyelftools')));
 });
 
-test('search handles Turkish characters, multiple terms and ranks titles first', () => {
+test('search handles English case, diacritics, multiple terms and title ranking', () => {
+  assert.equal(normalize('INLINE POINTER'), 'inline pointer');
   assert.equal(normalize('ÇALIŞMA İZİ'), 'calisma izi');
   const fixture = [
-    { title: 'Bir başka konu', text: 'Çalışma izi açıklaması', description: '' },
-    { title: 'Çalışma izi', text: 'örnek', description: '' },
-    { title: 'Çalışma', text: 'farklı bir konu', description: '' },
+    { title: 'Another topic', text: 'Runtime trace description', description: '' },
+    { title: 'Runtime trace', text: 'example', description: '' },
+    { title: 'Runtime', text: 'another topic', description: '' },
+    { title: 'Inlining pointers', text: '', description: '' },
   ];
-  assert.deepEqual(searchPages(fixture, 'calisma izi').map(page => page.title), ['Çalışma izi', 'Bir başka konu']);
+  assert.deepEqual(searchPages(fixture, 'RUNTIME TRACE').map(page => page.title), ['Runtime trace', 'Another topic']);
   assert.equal(searchPages(fixture, '').length, 0);
+  assert.equal(searchPages(fixture, 'INLINING')[0].title, 'Inlining pointers');
 });
 
 test('project and root URL generation preserves links and rejects unsafe schemes', () => {

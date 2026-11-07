@@ -1,16 +1,16 @@
 ---
-title: "Bir bellek alanının izin değişimini gözlemlemek"
+title: Observing a memory permission change
 ---
 
-# Bir bellek alanının izin değişimini gözlemlemek
+# Observing a memory permission change
 
-Bu laboratuvar, anonim bir bellek eşlemesinin yazılabilir (`RW`) durumdan çalıştırılabilir (`RX`) duruma geçişini (`W^X` prensibinin dinamik ihlali) inceler. Örnek bilerek bellekte kod çalıştırmaz; böylece bir bellek alanına çalıştırma izni verilmiş olmasının, orada kesinlikle kod yürütüldüğü anlamına gelmediğini somut olarak kanıtlar.
+This laboratory examines an anonymous mapping changing from writable (`RW`) to executable (`RX`), preserving basic **W^X** by avoiding simultaneous write and execute permissions. The example deliberately does not execute code from the mapping, demonstrating that execute permission alone does not establish execution.
 
-## 1. Ön Koşullar ve Hazırlık
+## 1. Requirements and preparation
 
-Laboratuvar için standart bir Linux sistemi, GCC veya Clang derleyicisi ve `strace` aracı gereklidir.
+Use a standard Linux system, GCC or Clang, and `strace`.
 
-Geçici bir çalışma klasöründe `izin.c` dosyasını oluşturun:
+Create `izin.c` in a temporary working directory:
 
 ```c
 #include <stdio.h>
@@ -22,96 +22,103 @@ int main(void) {
     if (page <= 0) return 1;
     size_t size = (size_t)page;
 
-    // 1. Anonim bellek ayır (Yazılabilir ve Okunabilir: RW)
+    // 1. Allocate anonymous memory (read/write: RW)
     void *area = mmap(NULL, size, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (area == MAP_FAILED) { perror("mmap"); return 1; }
 
-    // Belleğe bayt yaz (RW iznini sına)
-    ((unsigned char *)area)[0] = 0x90; // NOP baytı
-    printf("pid=%ld area=%p size=%zu (Durum: RW)\n", (long)getpid(), area, size);
+    // Write a byte to memory (test RW access)
+    ((unsigned char *)area)[0] = 0x90; // NOP byte
+    printf("pid=%ld area=%p size=%zu (State: RW)\n", (long)getpid(), area, size);
     fflush(stdout);
 
-    // /proc/<pid>/maps dosyasını incelemek için 5 saniye bekle
+    // Wait five seconds to inspect /proc/<pid>/maps
     sleep(5);
 
-    // 2. Bellek izinlerini Okunabilir ve Çalıştırılabilir (RX) yap
+    // 2. Change memory permissions to read/execute (RX)
     if (mprotect(area, size, PROT_READ | PROT_EXEC) == -1) {
         perror("mprotect");
         munmap(area, size);
         return 1;
     }
-    puts("Izin mprotect ile RX oldu; bu alanda hic kod calistirilmiyor!");
+    puts("mprotect changed permissions to RX; no code is executed in this region!");
     fflush(stdout);
 
-    // maps dosyasındaki değişimi incelemek için 5 saniye daha bekle
+    // Wait another five seconds to inspect the mapping change
     sleep(5);
 
-    // 3. Belleği serbest bırak
+    // 3. Release the mapping
     if (munmap(area, size) == -1) { perror("munmap"); return 1; }
     return 0;
 }
 ```
 
-## 2. Derleme ve Sistem Çağrılarını İzleme (strace)
+## 2. Compilation and syscall tracing
 
-Programı hata ayıklama sembolleriyle derleyin ve sistem çağrılarını filtreleyerek çalıştırın:
+Build with debug symbols and run with filtered system-call tracing:
 
 ```bash
 gcc -Wall -Wextra -O0 -g izin.c -o izin
 strace -e trace=mmap,mprotect,munmap ./izin
 ```
 
-Beklenen `strace` çıktısı:
+A schematic strace excerpt, not measured on Linux during this revision. Use your own page size, PID, and addresses:
 
 ```text
 mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7fa289c00000
-pid=25410 area=0x7fa289c00000 size=4096 (Durum: RW)
+pid=25410 area=0x7fa289c00000 size=4096 (State: RW)
 mprotect(0x7fa289c00000, 4096, PROT_READ|PROT_EXEC) = 0
-Izin mprotect ile RX oldu; bu alanda hic kod calistirilmiyor!
+mprotect changed permissions to RX; no code is executed in this region!
 munmap(0x7fa289c00000, 4096)            = 0
 +++ exited with 0 +++
 ```
 
 > [!NOTE]
-> Dinamik bağlayıcının (`ld-linux.so`) program başlarken kütüphaneleri yüklemek için yaptığı dahili `mmap` ve `mprotect` çağrıları da çıktıda görünecektir. Programın kendi yazdırdığı `area` adresiyle eşleşen satırlara odaklanın.
+> The dynamic linker (`ld-linux.so`) also makes `mmap` and `mprotect` calls while loading libraries. Focus on entries matching the `area` address printed by this program.
 
-## 3. İkinci Bir Terminalden /proc/PID/maps Gözlemi
+## 3. Inspecting /proc/PID/maps from another terminal
 
-Program `sleep(5)` aşamasındayken ikinci bir terminal açarak yazdırılan PID numarasıyla bellek haritasını kontrol edin:
+During each `sleep(5)`, open another terminal and inspect mappings using the printed PID.
 
-### İlk 5 Saniyede (RW Aşaması):
+### First five seconds: the RW stage
+
 ```bash
 grep "7fa289c00000" /proc/25410/maps
 ```
-Çıktı:
+
+Schematic line:
+
 ```text
-7fa289c00000-7fa289c01000 rw-p 00000000 00:00 0                          [anon]
+7fa289c00000-7fa289c01000 rw-p 00000000 00:00 0
 ```
 
-### Sonraki 5 Saniyede (mprotect Sonrası RX Aşaması):
+### Next five seconds: RX after mprotect
+
 ```bash
 grep "7fa289c00000" /proc/25410/maps
 ```
-Çıktı:
+
+Schematic line:
+
 ```text
-7fa289c00000-7fa289c01000 r-xp 00000000 00:00 0                          [anon]
+7fa289c00000-7fa289c01000 r-xp 00000000 00:00 0
 ```
 
-Sayfa izinleri `rw-p` durumundan `r-xp` durumuna geçmiştir. Dosya yolu alanında hiçbir dosya adı bulunmamakta (`[anon]`) yani sayfa tamamen bellekte oluşturulmuş bir çalıştırılabilir kod sayfası görüntüsü sergilemektedir.
+After a successful `mprotect`, expect `rw-p` → `r-xp`. An unnamed anonymous mapping has an empty path; do not expect a generic `[anon]` label. Linux may display named private anonymous mappings as `[anon:name]`.
 
-## 4. Analiz ve Hipotez Doğrulama
+## 4. Analysis and hypothesis testing
 
-Bu deney neyi kanıtlamıştır?
-1. **İzin Değişimi != Kod Yürütme**: Hedef alanda hiçbir makine komutu çalıştırılmamıştır (`RIP` yazmacı bu alana hiç yönlendirilmemiştir). Bu nedenle yalnızca bir sayfanın `r-xp` olduğunu görmek "bellek içi zararlı kod çalıştı" sonucuna varmak için yetersizdir.
-2. **eBPF ve Perf ile Doğrulama**: `perf record -e cycles` ile izleme yapıldığında bu adrese ait hiçbir donanımsal örnek (sample) düşmez.
-3. **Güvenlik Politikası (W^X / PaX / SELinux)**: Bazı kurumsal Linux dağıtımlarında anonim bir belleğe `PROT_EXEC` verilmesi çekirdek güvenlik politikaları (SELinux `execmem`) tarafından engellenebilir ve `mprotect` işlemi `EPERM` veya `EACCES` hatasıyla başarısız olabilir.
+The experiment tests these distinctions:
 
-## İncelemeyi Derinleştir
+1. **Permission change != code execution**: No control transfer into the target area occurs. A page appearing as `r-xp` is therefore insufficient evidence that malicious in-memory code ran.
+2. **Sampling limits**: The source does not transfer control to the area, but absence of perf samples alone would not prove nonexecution. Sampling can miss brief or rare execution. Mappings and permission changes are not execution records either.
+3. **Security policy: W^X / PaX / SELinux**: Kernel policy, such as SELinux `execmem`, may prohibit adding `PROT_EXEC` to anonymous memory, causing `mprotect` to fail with an error such as `EPERM` or `EACCES`.
 
-Bellek izinlerini değiştiren özel yükleyicilerin ve paketleyicilerin çalışma mimarisini öğrenmek için [Özel yükleyiciler](../rehberler/ozel-yukleyiciler.md) rehberine geçin. Dinamik kütüphane fonksiyonlarının çağrı hedeflerini `LD_PRELOAD` ile değiştirmeyi denemek için [Sembol seçimi laboratuvarı](sembol-secimi.md) uygulamasına geçin.
+## Investigate further
 
-## Kaynaklar
+Read [custom loaders](../rehberler/ozel-yukleyiciler.md) to understand loaders and packers that change memory permissions. Try the [symbol selection laboratory](sembol-secimi.md) to redirect library calls with `LD_PRELOAD`.
+
+## Sources
 
 - [mmap — Linux man-pages (man 2 mmap)](https://man7.org/linux/man-pages/man2/mmap.2.html)
 - [mprotect — Linux man-pages (man 2 mprotect)](https://man7.org/linux/man-pages/man2/mprotect.2.html)

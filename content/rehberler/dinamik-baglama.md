@@ -1,136 +1,125 @@
 ---
-title: "Dinamik bağlama: GOT, PLT ve sembol çözümleme"
+title: Dynamic linking — GOT, PLT, and symbol resolution
 ---
 
-# Dinamik bağlama: GOT, PLT ve sembol çözümleme
+# Dynamic linking — GOT, PLT, and symbol resolution
 
-Linux üzerinde dinamik olarak bağlanan (`dynamically linked`) bir ELF dosyası, harici kütüphanelerdeki (örneğin `libc.so.6` içindeki `puts` veya `malloc`) fonksiyonların adreslerini derleme anında bilemez. Çünkü paylaşımlı kütüphaneler her çalıştırmada ASLR nedeniyle belleğin farklı bir adresine yüklenebilir.
+A dynamically linked ELF file on Linux cannot know at compile time the runtime addresses of functions in external libraries, such as `puts` or `malloc` in `libc.so.6`. ASLR can load shared libraries at different addresses on each execution.
 
-Bu sorunu çözmek için ELF mimarisi iki temel veri yapısı kullanır:
-1. **GOT (Global Offset Table)**: Verilerin ve fonksiyonların nihai bellek adreslerini tutan işaretçi tablosu.
-2. **PLT (Procedure Linkage Table)**: Fonksiyon çağrılarını dinamik yükleyici üzerinden ilk seferde çözümleyip (lazy binding) GOT'a yazan çalıştırılabilir atlama tablosu.
+ELF uses two important structures to support this:
 
-Tersine mühendislikte harici çağrıları izlemek, fonksiyonların kancalanmasını (hooking) anlamak ve bellek korumalarını (RELRO) kavramak için GOT PLT mekanizması anahtar roldedir.
+1. **GOT (Global Offset Table)**: A pointer table holding resolved memory addresses for data and functions.
+2. **PLT (Procedure Linkage Table)**: Executable call stubs that can route the first call through the dynamic linker for lazy binding and subsequent calls through the resolved GOT slot.
 
-## 1. GOT ve PLT Çalışma Mekanizması
+The GOT/PLT mechanism helps explain external calls, function hooking, and RELRO memory protections.
 
-Aşağıdaki şema, ilk kez çağrılan bir `puts("Merhaba")` fonksiyonunun PLT ve GOT arasındaki adım adım yolculuğunu gösterir:
+## 1. How the GOT and PLT interact
+
+The following diagram illustrates the first `puts("Hello")` call as it passes through the PLT and GOT:
 
 ```text
-Kullanıcı Kodu                    PLT Bölümü (.plt)                      GOT Bölümü (.got.plt)
-+-----------------------+         +----------------------------+         +----------------------------+
-| call puts@plt         | ------> | puts@plt:                  | ------> | GOT[puts]                  |
-+-----------------------+         |   jmp *GOT[puts]           |         |   (İlk başta PLT'nin       |
-                                  |   push $reloc_offset       | <------ |    ikinci satırına döner!) |
-                                  |   jmp PLT0                 |         +----------------------------+
-                                  +----------------------------+                       |
-                                                |                                      |
-                                                v                                      v
-                                  +----------------------------+         +----------------------------+
-                                  | PLT0 (Ortak Çözücü):       | ------> | _dl_runtime_resolve()      |
-                                  |   push *GOT[1] (link_map)  |         |   (libc.so içinde puts'u   |
-                                  |   jmp  *GOT[2] (dl_resolve)|         |    bulur ve GOT[puts]'a    |
-                                  +----------------------------+         |    gerçek adresi yazar)    |
-                                                                         +----------------------------+
-                                                                                       |
-                                                                                       v
-                                                                         puts() asıl adresi çalışır.
+User code                  PLT (.plt)                    GOT (.got.plt)
++------------------+       +------------------------+    +-------------------------+
+| call puts@plt    | ----> | puts@plt:              | -> | GOT[puts]               |
++------------------+       |   jmp *GOT[puts]       |    | Initially points back   |
+                          |   push $reloc_offset   | <- | into the PLT entry      |
+                          |   jmp PLT0             |    +-------------------------+
+                          +------------------------+
+                                     |
+                                     v
+                          +------------------------+    +-------------------------+
+                          | PLT0 (common resolver) | -> | _dl_runtime_resolve()   |
+                          |   push *GOT[1]         |    | Find puts in libc.so    |
+                          |   jmp  *GOT[2]         |    | and update GOT[puts]    |
+                          +------------------------+    +-------------------------+
+                                                                   |
+                                                                   v
+                                                        Execute resolved puts()
 ```
 
-### Tembel Bağlama (Lazy Binding) Adımları:
-1. **İlk Çağrı**: `call puts@plt` işletilir. Kontrol `puts@plt` adresine geçer.
-2. **İlk Atlama**: `jmp *GOT[puts]` çalışır. Ancak ilk anda `GOT[puts]` hücresi henüz `puts` adresini tutmaz; `puts@plt`'nin hemen altındaki `push $reloc_offset` satırını gösterir!
-3. **Çözücüye Geçiş**: Fonksiyonun relocation ofseti yığına atılır ve `jmp PLT0` ile dinamik yükleyicinin ortak çözücüsüne atlanır.
-4. **Çözümleme ve Güncelleme**: Dinamik yükleyicinin `_dl_runtime_resolve()` fonksiyonu sembol tablosunu tarar, `libc.so` içindeki `puts` sanal adresini bulur ve `GOT[puts]` hücresine kalıcı olarak yazar.
-5. **İkinci Çağrı**: Program daha sonra tekrar `puts@plt` çağırdığında, `jmp *GOT[puts]` doğrudan çözümlenmiş adrese atlar; yükleyici bir daha devreye girmez.
+### Lazy binding, step by step
 
-## 2. readelf ile Relocation Tablolarını İncelemek
+1. **First call**: `call puts@plt` transfers control to the PLT entry.
+2. **Initial jump**: `jmp *GOT[puts]` executes. Initially the slot points back into the PLT entry, at the `push $reloc_offset` path, rather than to `puts`.
+3. **Resolver entry**: The relocation information is pushed, and `jmp PLT0` transfers control to the common dynamic linker resolver path.
+4. **Resolution and update**: The `_dl_runtime_resolve()` path resolves the symbol, locates `puts` in `libc.so`, and updates `GOT[puts]` with the resolved address.
+5. **Later calls**: Another call to `puts@plt` jumps directly through the resolved GOT slot without repeating that resolution.
 
-Bir ELF dosyasının dış bağımlılıklarını ve relocation kayıtlarını `readelf -r` ile görebilirsiniz:
+## 2. Inspecting relocations with readelf
+
+Use `readelf -r` to examine an ELF file's relocation records and external references:
 
 ```bash
 readelf -r ./ornek
 ```
 
-Örnek çıktı:
+No relocation dump was generated during this revision. Save the declared record count together with every entry in actual output; addresses and records vary by build and linker.
 
-```text
-Relocation section '.rela.dyn' at offset 0x5a0 contains 4 entries:
-  Offset          Info           Type           Sym. Value    Sym. Name + Addend
-000000003df8  000200000006 R_X86_64_GLOB_DAT 0000000000000000 __libc_start_main + 0
-000000003e00  000300000006 R_X86_64_GLOB_DAT 0000000000000000 __gmon_start__ + 0
+### Common x86-64 relocation types
 
-Relocation section '.rela.plt' at offset 0x600 contains 2 entries:
-  Offset          Info           Type           Sym. Value    Sym. Name + Addend
-000000004018  000400000007 R_X86_64_JUMP_SLOT 0000000000000000 puts + 0
-000000004020  000500000007 R_X86_64_JUMP_SLOT 0000000000000000 exit + 0
-```
+- **`R_X86_64_JUMP_SLOT`**: A GOT entry for a function address resolved through the PLT.
+- **`R_X86_64_GLOB_DAT`**: A GOT address relocation for a function or data symbol.
+- **`R_X86_64_RELATIVE`**: A relative address adjusted by the load base for ASLR/PIE.
+- **`R_X86_64_IRELATIVE`**: Indirect resolution at runtime, associated with GNU IFUNC behavior such as selecting a `memcpy` implementation for available CPU features.
 
-### Başlıca Relocation Tipleri (x86-64):
-- **`R_X86_64_JUMP_SLOT`**: PLT tarafından çözülecek fonksiyon adresleri için GOT girdisi.
-- **`R_X86_64_GLOB_DAT`**: Kütüphanelerden çekilen global değişkenlerin adresleri için GOT girdisi.
-- **`R_X86_64_RELATIVE`**: ASLR/PIE nedeniyle taban adrese eklenmesi gereken göreceli adresler.
-- **`R_X86_64_IRELATIVE`**: GNU IFUNC (Indirect Function) tarafından çalışma anında çözülecek fonksiyonlar (örneğin işlemcinin AVX2 desteğine göre farklı `memcpy` seçilmesi).
+## 3. Partial and full RELRO
 
-## 3. RELRO Güvenliği: Partial ve Full RELRO
+Writable GOT slots are targets for memory corruption, including GOT overwrite attacks. **RELRO (Relocation Read-Only)** reduces this writable area after relocation.
 
-GOT tablosu doğası gereği yazılabilir (`writable`) olduğunda, bellek güvenliği açıklarında saldırganların en çok hedef aldığı alandır (GOT Overwrite saldırısı). Bu riski önlemek için **RELRO (Relocation Read-Only)** koruması geliştirilmiştir.
+Common GNU/Linux ELF options are:
 
-| RELRO Seviyesi | Derleme Seçeneği | Lazy Binding? | .got İzni | .got.plt İzni | Güvenlik Durumu |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **No RELRO** | `-Wl,-z,norelro` | Var | RW | RW | Tamamen savunmasız |
-| **Partial RELRO** | `-Wl,-z,relro` | Var | R (Salt-okunur) | RW (Yazılabilir) | `.got.plt` hâlâ ezilebilir |
-| **Full RELRO** | `-Wl,-z,relro,-z,now` | **Yok (BIND_NOW)** | R (Salt-okunur) | Yok (Tümü .got içinde) | **Tam Koruma** |
+- `-Wl,-z,norelro`: Do not request a RELRO region.
+- `-Wl,-z,relro`: Create `PT_GNU_RELRO`; lazy PLT slots may remain writable.
+- `-Wl,-z,relro,-z,now`: The common “full RELRO” arrangement; resolve dynamic function relocations at startup and make the relevant GOT area read-only.
 
-Full RELRO ile derlenen bir programda (`gcc -Wl,-z,relro,-z,now`):
-1. Dinamik yükleyici, program başlarken **tüm sembolleri anında** çözer (Tembel bağlama iptal edilir).
-2. Çözümleme bittikten hemen sonra `mprotect()` çağrısı yapılarak tüm GOT tablosu salt-okunur (`PROT_READ`) yapılır.
-3. Artık hiçbir zararlı kod çalışma anında GOT girdilerini değiştiremez.
+Verify the protected range with `readelf -lW` and runtime mappings. The disappearance of a `.got.plt` section is not a necessary part of the definition. RELRO reduces the writable-GOT attack surface; it is not absolute protection against an attacker already executing arbitrary code in the process. Permission policy may allow pages to become writable again through `mprotect` ([glibc RELRO implementation](https://github.com/bminor/glibc/blob/glibc-2.40/elf/dl-reloc.c), [mprotect(2)](https://man7.org/linux/man-pages/man2/mprotect.2.html)).
 
-## 4. PLTHook Mekanizması ve Modern Karşılıkları (Frida & eBPF)
+## 4. PLTHook, Frida, and eBPF
 
-Tarihsel **`PLTHook`** aracı, GOT/PLT mekanizmasını en saf C koduyla manipüle eden klasik bir örnektir. Yaptığı işlem temelde şudur:
-1. Bellekteki `PT_DYNAMIC` segmentini tarayarak `DT_JMPREL` (relocation girdileri) ve `DT_STRTAB` dizgilerini bulur.
-2. Hedef fonksiyonun adıyla (`puts`) eşleşen `R_X86_64_JUMP_SLOT` girdisinin GOT ofsetini tespit eder.
-3. `mprotect()` ile o bellek sayfasını geçici olarak `PROT_READ | PROT_WRITE` yapar.
-4. GOT hücresindeki orijinal fonksiyon göstericisini kendi kanca fonksiyonuyla değiştirir.
+**PLTHook** is an example of manipulating the GOT/PLT mechanism in C. In outline, it:
 
-### Modern İkizleri:
-- **Kullanıcı Alanında: [Frida](https://frida.re/) Interceptor**:
-  PLTHook mantığını modern bir JavaScript API arkasında otomatikleştirir:
+1. Scans the in-memory `PT_DYNAMIC` segment to find `DT_JMPREL` relocations and `DT_STRTAB` strings.
+2. Locates the GOT offset of a matching `R_X86_64_JUMP_SLOT` for a function such as `puts`.
+3. Temporarily changes the page to `PROT_READ | PROT_WRITE` using `mprotect()`.
+4. Replaces the GOT slot's function pointer with a hook.
+
+### Other observation mechanisms
+
+- **User space: [Frida](https://frida.re/) Interceptor**:
+  Frida instruments a target function; its implementation is not the same as replacing a GOT slot. This example uses the **Frida 17 API** ([17.0.0 release notes](https://frida.re/news/2025/05/17/frida-17-0-0-released/), [API](https://frida.re/docs/javascript-api/)); the `puts` export must be loaded:
   ```javascript
-  Interceptor.attach(Module.findExportByName(null, "puts"), {
-      onEnter: function (args) { console.log("[+] puts: " + Memory.readUtf8String(args[0])); }
+  Interceptor.attach(Module.getGlobalExportByName("puts"), {
+      onEnter(args) { console.log("[+] puts: " + args[0].readUtf8String()); }
   });
   ```
-- **Çekirdek Düzeyinde: [eBPF uprobes](https://docs.kernel.org/trace/uprobetracer.html)**:
-  Sürecin belleğine hiç yazmadan, doğrudan çekirdek seviyesinde fonksiyon adresine kanca takar. Program `Full RELRO` ile korunsa veya `mprotect` engellense dahi eBPF çağrıyı görünmez biçimde izler:
-  ```bash
-  sudo bpftrace -e 'uprobe:/usr/lib/libc.so.6:puts { printf("puts: %s\n", str(arg0)); }'
-  ```
+  This block intercepted a `puts` call in our own test process using Frida 17.5.1 on macOS arm64. That API check does not validate Linux attach permissions or conditions.
+- **Kernel level: [eBPF uprobes](https://docs.kernel.org/trace/uprobetracer.html)**:
+  A uprobe can observe a user function without establishing a ptrace relationship; the Linux x86 implementation may write a software breakpoint at the target instruction. RELRO data pages and uprobes are different mechanisms. The [eBPF guide](ebpf-ile-olaylar.md) discusses access, cost, and detection limits. Use the actual libc file path on your distribution.
 
-## 5. Sembol Çözümleme Sırası ve LD_PRELOAD
+## 5. Symbol lookup and LD_PRELOAD
 
-Dinamik yükleyici bir sembolü ararken belirli bir arama kapsamı (`lookup scope`) uygular:
-1. **Ana İkili**: Programın kendisi.
-2. **`LD_PRELOAD`**: Kullanıcı tarafından önceden yüklenen kütüphaneler.
-3. **`DT_RPATH` / `DT_RUNPATH`**: İkili dosyaya gömülü kütüphane arama yolları.
-4. **`LD_LIBRARY_PATH`**: Ortam değişkenindeki yollar.
-5. **`/etc/ld.so.cache`**: Sistem kütüphane önbelleği.
-6. **Varsayılan Yollar**: `/lib64`, `/usr/lib64`.
+**Symbol lookup scope** selects definitions from loaded objects. The main program, preloaded objects, and dependencies participate in normal glibc startup; visibility, symbol versioning, `-Bsymbolic`, `dlopen` scopes, and namespaces can change the result. A libc hook does not cover raw syscalls.
 
-Bu öncelik sırası nedeniyle `LD_PRELOAD` ile araya girilerek sistem çağrıları ve C fonksiyonları kolayca kancalanabilir (interposition).
+**Library file search** is a separate operation. For a dependency name without a slash, glibc `ld.so` generally searches:
 
-## İncelemeyi Derinleştir
+1. The relevant `DT_RPATH` when `DT_RUNPATH` is absent.
+2. `LD_LIBRARY_PATH` outside secure-execution mode.
+3. `DT_RUNPATH`, only for that object's direct dependencies.
+4. `/etc/ld.so.cache`.
+5. The target ABI's default directories.
 
-Sembol seçiminin `LD_PRELOAD` ile çalışma anında nasıl değiştiğini bizzat denemek için [Sembol seçimi laboratuvarı](../laboratuvarlar/sembol-secimi.md) uygulamasına geçin. Sembolleri ve hata ayıklama bilgilerini tamamen silinmiş ikililerde analiz yöntemlerini öğrenmek için [Stripped ELF](stripped-elf.md) rehberini inceleyin.
+A name containing a slash is interpreted as a path. See [ld.so(8)](https://man7.org/linux/man-pages/man8/ld.so.8.html) for details such as `-z nodefaultlib` and glibc-hwcaps; do not assume `/lib64` on every architecture.
 
-## Kaynaklar
+## Investigate further
+
+Try the [symbol selection laboratory](../laboratuvarlar/sembol-secimi.md) to observe `LD_PRELOAD` changing call targets. Continue with [stripped ELF](stripped-elf.md) for analysis when ordinary symbol and debug information is absent.
+
+## Sources
 
 - [MaskRay: All about symbol versioning](https://maskray.me/blog/2020-11-26-all-about-symbol-versioning)
 - [MaskRay: ELF interposition and -Bsymbolic](https://maskray.me/blog/2021-05-16-elf-interposition-and-bsymbolic)
-- [MaskRay: Copy relocations and canonical PLT entries](https://maskray.me/blog/2021-01-09-copy-relocations-canonical-plt-entries)
-- [glibc elf/dl-runtime.c: _dl_runtime_resolve implementation](https://sourceware.org/git/?p=glibc.git;a=blob;f=elf/dl-runtime.c)
+- [MaskRay: Copy relocations, canonical PLT entries and protected visibility](https://maskray.me/blog/2021-01-09-copy-relocations-canonical-plt-entries-and-protected)
+- [glibc 2.40: _dl_fixup (elf/dl-runtime.c)](https://github.com/bminor/glibc/blob/glibc-2.40/elf/dl-runtime.c)
+- [glibc 2.40: x86-64 resolver trampoline](https://github.com/bminor/glibc/blob/glibc-2.40/sysdeps/x86_64/dl-trampoline.h)
 - [PLTHook — Hook function calls via PLT](https://github.com/kubo/plthook)
-
 - [ld.so — Linux man-pages](https://man7.org/linux/man-pages/man8/ld.so.8.html)

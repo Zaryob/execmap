@@ -1,86 +1,80 @@
 ---
-title: "İkili fark analizi (Binary Diffing) ve sürüm karşılaştırma"
+title: Binary diffing and version comparison
 ---
 
-# İkili fark analizi (Binary Diffing) ve sürüm karşılaştırma
+# Binary diffing and version comparison
 
-İkili fark analizi (Binary Diffing), aynı programın iki farklı derlemesi (örneğin sürüm 1.0 ile sürüm 1.1) veya bir güvenlik yamasından önceki ve sonraki halleri arasındaki anlamsal farkları ortaya çıkarma disiplinidir.
+Binary diffing identifies structural differences between two builds of a program, such as versions 1.0 and 1.1 or builds before and after a security patch, and investigates candidate semantic changes. Byte or graph matches alone do not prove behavioral equivalence.
 
-Tersine mühendislikte en kritik kullanım alanlarından biri **Yama Analizi (Patch Diffing / 1-day Analysis)** sürecidir. Bir yazılım üreticisi bir güvenlik açığı için yama yayınladığında, güvenlik araştırmacıları eski ve yeni ikiliyi karşılaştırarak yamalanan zaafiyetin tam kök nedenini (root cause) ve istismar edilebilirliğini (exploitability) dakikalar içinde tespit edebilir.
+One important application is **patch diffing**, also called 1-day analysis. After a vendor releases a security fix, researchers can compare the old and new binaries to investigate the vulnerability's root cause and exploitability. Time and conclusions depend on the sample's complexity and the available evidence.
 
-## 1. Neden Basit Bayt Farkı (diff / cmp) Yetersizdir?
+## 1. Why byte comparison alone is insufficient
 
-Kaynak kodda yapılan tek satırlık bir değişiklik veya derleme bayrağındaki küçük bir fark, ikili dosya üzerinde bir çığ etkisi (avalanche effect) yaratır:
+A one-line source change or small build-option change can have broad effects on the binary:
 
 ```text
-Kaynak Kod Değişikliği (1 satır)
+One source line changes
        |
        v
-Fonksiyonun uzunluğu 4 bayt uzar
+A function grows by four bytes
        |
        v
-Takip eden TÜM fonksiyonların sanal adresleri kayar
+Following function addresses may shift
        |
        v
-Tüm göreceli dallanmalar (jmp, call), relocation ofsetleri ve jump table'lar değişir
+Relative branches, relocations, and jump tables may change
        |
        v
-"cmp" veya "diff" dosyaların %90'ının değiştiğini söyler! (Yanıltıcı Gürültü)
+cmp/diff can report widespread byte changes (comparison noise)
 ```
 
-Bu nedenle ikili fark analizi bayt seviyesinde değil, **Kontrol Akış Grafiği (CFG)** ve **Semantik (Anlamsal)** seviyede yapılmalıdır.
+Binary comparison therefore needs **control-flow graph (CFG)** and **semantic** analysis in addition to byte differences.
 
-| Seviye | Kullanılan Araç | Karşılaştırma Temeli | Hassasiyet |
+| Level | Tools | Comparison basis | Use and limits |
 | :--- | :--- | :--- | :--- |
-| **Bayt Seviyesi** | `biodiff`, `vbindiff`, `cmp` | Ham bayt dizilimleri, dosya ofsetleri | Sadece küçük sabit yamalarda yararlı |
-| **Sembolik Seviye** | `nm`, `readelf`, `bloaty` | Fonksiyon boyutları, bölüm hacimleri | Genel mimari farklar |
-| **Grafik / Blok Seviyesi** | `BinDiff`, `Ghidra Version Tracking` | Temel bloklar, CFG yapısı, çağrı grafikleri | **En yüksek doğruluk (Yama analizi)** |
-| **Mikroyürütme (Dynamic)** | `fnprint` | Girdi/çıktı davranışları, yan etkiler | Obfuscated kodlar için |
+| **Bytes** | `biodiff`, `vbindiff`, `cmp` | Raw byte sequences and file offsets | Useful for small fixed-location patches |
+| **Symbols** | `nm`, `readelf`, `bloaty` | Function and section sizes | Broad structural differences |
+| **Graphs / blocks** | `BinDiff`, `Ghidra Version Tracking` | Basic blocks, CFGs, call graphs | Narrows patch candidates; false matches remain possible |
+| **Microexecution** | `fnprint` | Input/output behavior and side effects | Investigating obfuscated code |
 
-## 2. Grafik Eşleme (Graph Matching) Nasıl Çalışır?
+## 2. How graph matching works
 
-`BinDiff` ve `Ghidra Version Tracking` gibi gelişmiş araçlar iki ikiliyi şu adımlarla eşleştirir:
+Tools such as `BinDiff` and `Ghidra Version Tracking` use several matching signals:
 
-1. **İsim ve Sembol Eşlemesi**: Eğer semboller mevcutsa doğrudan adlar eşleştirilir.
-2. **Çağrı Grafiği Topolojisi (Call Graph Matching)**: Fonksiyonların kimleri çağırdığı ve kimler tarafından çağrıldığı eşleştirilir.
-3. **Temel Blok (Basic Block) İmzaları**: Fonksiyonun içindeki dallanma grafiği ayrıştırılır:
-   - Temel blok sayısı ve kenar (edge) sayısı.
-   - Döngü sayıları ve siklomatik karmaşıklık.
-   - Blok içindeki talimat türleri (aritmetik, bellek, kontrol transferi).
-4. **Sabitler ve Dize Referansları**: Fonksiyonun kullandığı sabit sayılar (magic constants) ve string göstericileri eşleştirilir.
+1. **Names and symbols**: Match names directly when symbols remain available.
+2. **Call graph topology**: Compare callers and callees.
+3. **Basic block signatures**: Compare block/edge counts, loops, cyclomatic complexity, and instruction categories such as arithmetic, memory access, and control transfer.
+4. **Constants and string references**: Compare magic constants and references to strings.
 
-Eşleme sonucunda benzerlik skoru (`Similarity: 0.0 - 1.0`) ve güven skoru (`Confidence`) hesaplanır. Benzerliği `0.85 - 0.98` aralığında olan fonksiyonlar, yamanın yapıldığı yerlerdir.
+The result may include a similarity score (`0.0–1.0`) and confidence score. Their definitions depend on the tool and correlator. A range such as `0.85–0.98` does not establish the patch location, and compiler differences can change scores. Validate matches against disassembly, data flow, and source diffs where available.
 
-## 3. Ghidra ile Patch Diffing İş Akışı
+## 3. Patch diffing with Ghidra
 
-Ghidra'nın dahili **Version Tracking** aracı ile iki ELF dosyasını karşılaştırma adımları:
+Use Ghidra's **Version Tracking** to compare two ELF files:
 
-1. **Analiz**: Her iki ikili dosya (`eski_surum` ve `yeni_surum`) Ghidra projesine aktarılır ve otomatik analizi tamamlanır.
-2. **Session Başlatma**: `File -> New Version Tracking Session` seçilerek kaynak ve hedef programlar belirlenir.
-3. **Korelatörleri Çalıştırma**:
-   - `Exact Symbol Name Match`: Bilinen fonksiyonları sabitler.
-   - `Duplicate Function Match`: Birebir aynı kalan fonksiyonları eler.
-   - `Exact Function Instructions Match`: Talimat dizilimi değişmeyenleri ayırır.
-   - `Similar Function Instructions Match`: Değişen fonksiyonları listeler.
-4. **Grafiksel Karşılaştırma**: Değişen fonksiyonun üzerine sağ tıklanıp `Compare Code` seçildiğinde, eklenen temel bloklar (yeşil) ve silinen bloklar (kırmızı) yan yana disasm ve decompile görünümünde açılır.
+1. **Analyze**: Import both binaries (`eski_surum` and `yeni_surum`) and complete automatic analysis.
+2. **Start a session**: Choose `File -> New Version Tracking Session` and select source and destination programs.
+3. **Run correlators**: Ghidra **11.4.2** help lists `Exact Symbol Name Match`, `Exact Function Instructions Match`, and `Duplicate Function Instructions Match`. The last produces 1:N/M:N candidates; it does not simply eliminate identical functions. Instruction correlators may mask operands, so a score of 1.0 is not byte equality. Confirm options in the installed version's help ([official correlator documentation](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.4.2_build/Ghidra/Features/VersionTracking/src/main/help/help/topics/VersionTrackingPlugin/VT_Correlators.html)).
+4. **Compare**: Open candidates in the version's function comparison view. Colors and menu names vary by version/theme; a highlighted block alone does not prove a security patch.
 
-## 4. Derleyici Optimizasyonu ile Mantık Farkını Ayırt Etmek
+## 4. Separating optimization from logic changes
 
-İkili fark analizinde en çok zaman kaybettiren unsur, derleyicinin optimizasyon tercihleridir:
-- **Fonksiyon İçi Genişletme (Inlining)**: Küçük bir fonksiyonun doğrudan çağrıldığı yere gömülmesi, o fonksiyonun yok olduğu hissini yaratabilir.
-- **Döngü Açma (Loop Unrolling)**: 10 adımlık bir döngünün art arda 10 kez yazılması temel blok sayısını artırır.
-- **Vektörizasyon (SIMD / AVX)**: Basit bir skaler döngünün AVX2/AVX-512 talimatlarına çevrilmesi blok yapısını radikal biçimde değiştirir.
+Compiler transformations can complicate binary comparison:
 
-Gerçek bir mantık/güvenlik düzeltmesini optimizasyondan ayırmak için disasm yerine decompile (C benzeri sözde kod) üzerinden veri akışını (Data Flow) ve sınır kontrollerini (`bounds check: if (len > MAX)`) takip edin.
+- **Inlining** embeds a function at its call site, making it appear to have disappeared.
+- **Loop unrolling** expands repeated operations and may increase block count.
+- **SIMD vectorization** replaces scalar operations with instructions such as AVX2/AVX-512 and can substantially alter block structure.
 
-## İncelemeyi Derinleştir
+Examine disassembly and decompiler pseudocode together. Follow data flow and bounds checks. Decompiled output is neither the original source nor proof of correctness.
 
-Derleme bayraklarının ikili kod üzerindeki etkisini kendi gözlerinizle görmek için [Derleme farkları laboratuvarı](../laboratuvarlar/derleme-farklari.md) uygulamasını yapın. Dinamik olarak belleğe yüklenen ve diskte dosya bırakmayan ikilileri analiz etmek için [Özel yükleyiciler](ozel-yukleyiciler.md) rehberine geçin.
+## Investigate further
 
-## Kaynaklar
+Run the [compiler differences laboratory](../laboratuvarlar/derleme-farklari.md) to observe build-option effects. Continue with [custom loaders](ozel-yukleyiciler.md) for code loaded dynamically into memory without a conventional on-disk executable path.
+
+## Sources
 
 - [BioDiff — Hex/Binary Difference Tool (8051Enthusiast)](https://github.com/8051Enthusiast/biodiff)
-- [Ghidra Patch Diffing Guide (CVE North Stars)](https://cve-north-stars.github.io/docs/Ghidra-Patch-Diffing)
+- [Ghidra — official project](https://github.com/NationalSecurityAgency/ghidra)
 - [BinDiff — Zynamics / Google](https://www.zynamics.com/bindiff.html)
 - [fnprint — Microexecution Function Identification (1rhino2)](https://github.com/1rhino2/fnprint)
-- [Halvar Flake: Structural Comparison of Executable Objects (DIMVA)](https://link.springer.com/chapter/10.1007/978-3-540-27814-6_11)
+- [Halvar Flake: Structural Comparison of Executable Objects — author's PDF](https://www.zynamics.com/downloads/dimva_paper2.pdf)

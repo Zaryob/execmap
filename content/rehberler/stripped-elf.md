@@ -1,139 +1,136 @@
 ---
-title: "Stripped ELF dosyalarını anlamlandırmak"
+title: Making sense of stripped ELF files
 ---
 
-# Stripped ELF dosyalarını anlamlandırmak
+# Making sense of stripped ELF files
 
-Tersine mühendislik pratiğinde karşılaşılan ikili dosyaların neredeyse tamamı **"stripped"** (sembolleri arındırılmış) durumdadır. Bir dosya üzerinde `strip` komutu çalıştırıldığında fonksiyon adları, kaynak kod satır numaraları ve yerel değişken isimleri silinir.
+If you are new to instructions, argument registers, and memory access, complete [assembly preparation](assembly-okuma.md) and the [first GDB investigation](../laboratuvarlar/gdb-ilk-inceleme.md) first. Boundary inference here builds on that basic data-flow knowledge.
 
-Ancak "stripped" olmak, bir ikili dosyanın tamamen isimsiz veya okunamaz bir bayt yığınına dönüştüğü anlamına gelmez. Dinamik bağlama gereksinimleri, istisna yönetimi (exception handling) tabloları ve derleyicinin ürettiği yapısal izler, dosyanın mimarisini yeniden inşa etmek için zengin ipuçları sunar.
+Many binaries encountered during reverse engineering are **stripped**. Running `strip` can remove function names, source line information, and local variable names.
 
-## 1. strip Komutu Neyi Siler, Neyi Silemez?
+A stripped binary is not necessarily a nameless, unreadable byte sequence. Dynamic linking requirements, exception-handling data, and compiler-generated structure provide clues for reconstructing its layout.
 
-Bir ELF dosyasında iki farklı sembol tablosu bulunabilir:
+## 1. What strip removes and what remains
+
+An ELF file may contain two different symbol tables:
 
 ```text
-+-------------------------------------------------------------------------+
-| .symtab ve .strtab (Statik Sembol Tablosu)                              |
-| - Tüm fonksiyonların (statik/dahili dahil) ve yerel değişkenlerin adı. |
-| - strip komutu bunu TAMAMEN SİLER.                                      |
-+-------------------------------------------------------------------------+
-| .dynsym ve .dynstr (Dinamik Sembol Tablosu)                            |
-| - Dışarıdan çağrılan veya dışarıya sunulan fonksiyonların adı.         |
-| - strip komutu bunu SİLEMEZ! Çünkü silinirse dinamik yükleyici          |
-|   (ld-linux.so) çalışma anında sembolleri çözümleyemez.                 |
-+-------------------------------------------------------------------------+
-| .debug_* (DWARF Hata Ayıklama Bölümleri)                                |
-| - Kaynak kod dosya yolları, satır numaraları, tip tanımları.            |
-| - strip komutu bunu TAMAMEN SİLER.                                      |
-+-------------------------------------------------------------------------+
-| .eh_frame ve .eh_frame_hdr (Unwind Tabloları)                          |
-| - C++ exception handling ve stack unwinding için gereklidir.           |
-| - strip komutu bunu SİLEMEZ!                                            |
-+-------------------------------------------------------------------------+
++-----------------------------------------------------------------------+
+| .symtab and .strtab: ordinary symbol table                             |
+| Function names, including local/static symbols.                       |
+| Ordinary stripping removes this table.                                |
++-----------------------------------------------------------------------+
+| .dynsym and .dynstr: dynamic symbol table                              |
+| Symbols required for dynamic linking, including imports and exports.   |
+| Required dynamic entries remain after ordinary stripping.              |
++-----------------------------------------------------------------------+
+| .debug_*: DWARF debug sections                                        |
+| Source paths, line numbers, and type descriptions.                     |
+| These are removed by stripping debug data.                             |
++-----------------------------------------------------------------------+
+| .eh_frame and .eh_frame_hdr: unwind information                        |
+| Used for exception handling and stack unwinding.                       |
+| Normally retained by ordinary stripping.                              |
++-----------------------------------------------------------------------+
 ```
 
-`file ./ornek` komutu çıktısında:
-- `not stripped`: `.symtab` mevcuttur.
-- `stripped`: `.symtab` silinmiştir, ancak dinamik bağlıysa `.dynsym` hâlâ yerindedir.
+In `file ./ornek` output:
+
+- `not stripped` indicates that the ordinary symbol table remains.
+- `stripped` indicates its removal; dynamically linked files can still retain `.dynsym`.
 
 ```bash
-# Dinamik sembolleri listele (strip edilmiş olsa bile çalışır):
+# List dynamic symbols (also works after ordinary stripping):
 readelf --dyn-syms ./ornek
 nm -D ./ornek
 ```
 
-## 2. sstrip (Super Strip) ve Bölüm Tablosu Yanılsaması
+## 2. sstrip and the section-table assumption
 
-Standart GNU `strip`, sembolleri temizlese bile dosyanın sonundaki Section Header tablosunu korur. Ancak Brian Raiter'ın geliştirdiği klasik **`sstrip` (Super Strip)** aracı, ELF tersine mühendisliğinde çığır açan temel bir gerçeği ispatlamıştır:
+Ordinary GNU `strip` retains a section header table even after removing symbols. Brian Raiter's **sstrip** illustrates an important distinction:
 
-> **Linux çekirdeğinin ELF yükleyicisi (`fs/binfmt_elf.c`), dosyadaki Section Header tablosunu (`.text`, `.data`, `.rodata`) asla okumaz. Çekirdek sadece Program Header (`PT_LOAD`) segmentlerine bakar.**
+> Normal ELF segment loading is driven by program headers; section names and an ordinary section table are not required for it. This is not a rule that section tables are never read by any ELF extension or kernel validation path.
 
-`sstrip` çalıştırıldığında veya `e_shoff = 0` yapıldığında:
-1. `readelf -S ./ornek` çıktısı "There are no sections in this file" der.
-2. Ghidra, IDA ve statik araçlar bölümleri otomatik sınıflandırmakta zorlanır.
-3. Ancak çekirdek dosyayı kusursuz biçimde belleğe yükler ve çalıştırır.
+After `sstrip`, or when section-table metadata is appropriately removed:
 
-### Runtime'da Bölümsüz Dosyayı Ortaya Çıkarmak:
-Statik olarak bölüm başlığı olmayan bir ikilinin kod ve veri sınırları çalışma anında `/proc/<pid>/maps` üzerinden saniyeler içinde çıkarılır:
+1. `readelf -S ./ornek` may report “There are no sections in this file.”
+2. Ghidra, IDA, and other static tools may find automatic classification harder.
+3. The kernel may still load the file if other requirements hold; changing `e_shoff` alone is not sufficient validation.
+
+### Inspecting a sectionless file at runtime
+
+Use `/proc/<pid>/maps` to inspect its runtime mapping ranges:
 
 ```bash
 cat /proc/$PID/maps
 ```
 
-Çıktıdaki `r-xp` izni taşıyan sayfa doğrudan kod (`.text`), `rw-p` izni taşıyan sayfa ise veri (`.data` / `.bss`) segmentidir. Bölüm adları olmasa dahi çekirdeğin bellek haritası yalan söylemez.
+`r-xp` denotes an executable private mapping; `rw-p` denotes a writable private mapping. A mapping may include multiple sections or padding. Permissions do not reveal exact `.text`/`.data` boundaries. Compare with `PT_LOAD` offsets; execution and maliciousness require separate evidence.
 
-## 3. Fonksiyon Sınırlarını Keşfetmenin Gizli Silahı: .eh_frame
+## 3. Candidate function boundaries in .eh_frame
 
-C++ programlarında `try/catch` blokları, C programlarında ise `pthread_cancel` veya hata ayıklayıcıların çağrı yığını oluşturması (`stack unwinding`) için derleyici `.eh_frame` bölümünü oluşturur.
+Compilers generate `.eh_frame` for unwinding needs such as C++ exception handling, C cancellation paths, and debugger stack reconstruction.
 
-Bu bölüm DWARF Call Frame Information (CFI) kayıtlarını içerir. Her fonksiyon için bir **FDE (Frame Description Entry)** kaydı bulunur. Bu kaydın içinde:
-- Fonksiyonun başlangıç sanal adresi (`initial_location`)
-- Fonksiyonun bayt cinsinden tam uzunluğu (`address_range`)
-
-açıkça yer alır! Yani bir ELF stripped olsa dahi, `.eh_frame` okunarak programdaki neredeyse tüm fonksiyonların başlangıç ve bitiş adresleri kusursuz bir kesinlikle çıkarılabilir:
+This section contains DWARF Call Frame Information (CFI). An FDE's start and range describe instructions covered by unwind information. A source function need not correspond to exactly one FDE: inlining, split code, and missing tables break that one-to-one assumption.
 
 ```bash
 readelf --debug-dump=frames ./ornek | grep -E "FDE.*pc="
 ```
 
-Örnek çıktı:
+Binutils commonly displays ranges without `0x`, such as `pc=0000000000001140..0000000000001185` (schematic addresses). The end is exclusive. An unwind range is a candidate function boundary, not a perfect inventory of source-level functions.
 
-```text
-00000060 0000000000000014 00000064 FDE cie=00000000 pc=0x1140..0x1185
-```
+## 4. Function-entry heuristics
 
-Burada `pc=0x1140..0x1185` ifadesi, `0x1140` adresinde başlayıp `0x1185` adresinde biten (uzunluğu `0x45` bayt) kesin bir fonksiyon sınırını gösterir.
+Without useful unwind information, disassemblers can use architecture-specific prologue patterns to identify candidate functions. For example, a build using `-fno-asynchronous-unwind-tables` and with `.eh_frame` removed may require other clues.
 
-## 4. Fonksiyon Giriş Heuristikleri (Prolog Analizi)
+### A conventional x86-64 prologue
 
-Eğer dosya `-fno-asynchronous-unwind-tables` ile derlenmiş ve `.eh_frame` de temizlenmişse, disassembler'lar fonksiyon sınırlarını mimariye özgü giriş kalıplarıyla (prologue) tespit eder:
-
-### x86-64 Geleneksel Prologue:
 ```assembly
 endbr64                 # f3 0f 1e fa (Intel CET Indirect Branch Tracking)
 pushq   %rbp            # 55
 movq    %rsp, %rbp      # 48 89 e5
-subq    $0x20, %rsp     # Yığında yer açma
+subq    $0x20, %rsp     # Allocate stack space
 ```
 
-### Fonksiyon Bitişi (Epilogue):
+### An epilogue
+
 ```assembly
 leaveq                  # c9
 retq                    # c3
 ```
 
 > [!NOTE]
-> Modern derleyicilerde `-fomit-frame-pointer` varsayılan olduğundan `push %rbp` her zaman bulunmayabilir. Bunun yerine doğrudan yığın işaretçisini ayarlayan `sub $N, %rsp` veya sadece `ret` talimatları aranır.
+> Modern optimized builds may omit frame pointers, so `push %rbp` is not guaranteed. Stack-pointer adjustments such as `sub $N, %rsp`, or a function consisting only of `ret`, are also possible.
 
-## 5. Build-ID ve debuginfod ile Sembolleri Geri Kazanmak
+## 5. Recovering debug data with Build-ID and debuginfod
 
-Modern Linux dağıtımlarında (Ubuntu, Fedora, Debian, Arch) derlenen ikililere benzersiz bir SHA-1 sağlama toplamı olan **Build-ID** gömülür:
+A linker may embed an optional **Build-ID** note. GNU ld supports multiple styles; SHA-1 is not mandatory. A Build-ID is neither a universal uniqueness guarantee nor necessarily the current checksum of a modified file ([GNU ld options](https://sourceware.org/binutils/docs/ld/Options.html)):
 
 ```bash
 readelf -n ./ornek | grep "Build ID"
 ```
 
-Çıktı:
+A schematic SHA-1-style identifier, not a measured identity:
+
 ```text
 Build ID: a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
 ```
 
-Bu kimlik, Linux dünyasının küresel hata ayıklama sunucu protokolü olan **`debuginfod`** ile eşleşir. GDB veya `debuginfod-find` aracı, sistemde kurulu olmasa bile dağıtım depolarından bu ikiliye ait özgün sembol ve kaynak dosyalarını otomatik olarak indirebilir:
+**debuginfod** can use this identifier to locate debug data. GDB or `debuginfod-find` may download matching original symbols and source from a suitable server even when they are not installed locally. Replace the illustrative identifier below with an actual Build-ID:
 
 ```bash
 debuginfod-find debuginfo a1b2c3d4e5f60718293a4b5c6d7e8f9012345678
 ```
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Debug sembollerini ayırmayı, dosyayı strip etmeyi ve GDB ile ayrılmış sembolleri çalışma anında bağlamayı uygulamalı görmek için [Debug bilgisi laboratuvarı](../laboratuvarlar/debug-bilgisi.md) sayfasını tamamlayın. Sürümler arası kod farklarını sembolsüz ortamda eşleştirmek için [İkili fark analizi](ikili-fark-analizi.md) rehberine geçin.
+Complete the [debug information laboratory](../laboratuvarlar/debug-bilgisi.md) to separate symbols, strip a file, and reconnect the data in GDB. Continue with [binary diffing](ikili-fark-analizi.md) to match code changes across versions without ordinary symbols.
 
-## Kaynaklar
+## Sources
 
 - [ELFkickers & sstrip — Brian Raiter](http://www.muppetlabs.com/~breadbox/software/elfkickers.html)
 - [GNU strip — Binutils Documentation](https://sourceware.org/binutils/docs/binutils/strip.html)
 - [GDB: Separate Debug Files](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html)
-- [MaskRay: All about .eh_frame](https://maskray.me/blog/2020-11-08-stack-unwinding)
+- [MaskRay: Stack unwinding](https://maskray.me/blog/2020-11-08-stack-unwinding)
 - [Kernel ORC unwinder documentation](https://www.kernel.org/doc/html/next/x86/orc-unwinder.html)
 - [elfutils: debuginfod service](https://sourceware.org/elfutils/Debuginfod.html)

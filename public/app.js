@@ -18,7 +18,7 @@ export function initCatalog(doc = document) {
       if (visible) count++;
     }
     for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
-    status.textContent = `${count} / ${items.length} rehber gösteriliyor.`;
+    status.textContent = `${count} / ${items.length} guides shown.`;
     empty.hidden = count !== 0;
   }
   input.addEventListener('input', update);
@@ -51,7 +51,7 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
     link.href = `${address.pathname}${address.search}${address.hash}`;
     const label = doc.createElement('small');
     label.className = 'result-kind';
-    label.textContent = `${page.kind === 'laboratuvar' ? 'laboratuvar' : page.kind === 'rehber' ? 'rehber' : 'başvuru'} / ${page.section}`;
+    label.textContent = `${page.kind === 'laboratuvar' ? 'lab' : page.kind === 'rehber' ? 'guide' : 'reference'} / ${page.section}`;
     const title = doc.createElement('span');
     title.textContent = page.title;
     const detail = doc.createElement('p');
@@ -62,19 +62,19 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
   function render() {
     list.replaceChildren();
     if (loadError) {
-      status.textContent = 'Arama indeksi yüklenemedi. Bağlantını kontrol edip yeniden dene.';
+      status.textContent = 'The search index could not be loaded. Check your connection and try again.';
       status.classList.add('search-error');
       const button = doc.createElement('button');
-      button.type = 'button'; button.textContent = 'Yeniden dene';
+      button.type = 'button'; button.textContent = 'Try again';
       button.addEventListener('click', () => { void load(); });
       const item = doc.createElement('li'); item.append(button); list.append(item);
       return;
     }
     status.classList.remove('search-error');
-    if (!pages) { status.textContent = 'Arama hazırlanıyor…'; return; }
+    if (!pages) { status.textContent = 'Preparing search…'; return; }
     const query = input.value.trim();
     const results = query ? searchPages(pages, query) : pages.filter(page => page.kind === 'rehber').slice(0, 6);
-    status.textContent = !query ? 'Başlangıç için rehberler. Tam metinde aramak için yaz.' : !results.length ? 'Sonuç bulunamadı. Daha kısa bir terimle tekrar dene.' : `${results.length} sonuç${results.length === 40 ? ' (ilk 40)' : ''}. Açmak için bir başlık seç.`;
+    status.textContent = !query ? 'Guides to get started. Type to search the full text.' : !results.length ? 'No results found. Try a shorter term.' : `${results.length} result${results.length === 1 ? '' : 's'}${results.length === 40 ? ' (first 40)' : ''}. Select a title to open it.`;
     for (const page of results) addResult(page, query);
   }
   async function load() {
@@ -84,9 +84,9 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
     pending = (async () => {
       try {
         const response = await request(`${base}search-index.json`);
-        if (!response.ok) throw new Error('Arama indeksi erişilemiyor');
+        if (!response.ok) throw new Error('Search index unavailable');
         const data = await response.json();
-        if (!Array.isArray(data) || data.some(page => typeof page.title !== 'string' || typeof page.url !== 'string' || typeof page.text !== 'string')) throw new Error('Geçersiz arama indeksi');
+        if (!Array.isArray(data) || data.some(page => typeof page.title !== 'string' || typeof page.url !== 'string' || typeof page.text !== 'string')) throw new Error('Invalid search index');
         pages = data;
       } catch { loadError = true; }
       finally { pending = null; render(); }

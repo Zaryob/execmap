@@ -14,7 +14,7 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   initCatalog(document);
   const rows = [...document.querySelectorAll('[data-catalog-item]')];
   const visible = () => rows.filter(row => !row.hidden);
-  assert.equal(visible().length, 14);
+  assert.equal(visible().length, 15);
   document.querySelector('[data-filter="tracing"]').click();
   assert.equal(visible().length, 4);
   const input = document.getElementById('catalog-query');
@@ -26,7 +26,7 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   assert.equal(document.getElementById('catalog-empty').hidden, false);
   document.querySelector('[data-reset-filters]').click();
   assert.equal(input.value, '');
-  assert.equal(visible().length, 14);
+  assert.equal(visible().length, 15);
   assert.equal(document.querySelector('[data-filter="all"]').getAttribute('aria-pressed'), 'true');
 });
 
@@ -48,10 +48,10 @@ test('search opens, loads once, renders matching content safely and closes', asy
   assert.ok([...document.querySelectorAll('#search-results a')].some(link => link.getAttribute('href').includes('bellek-izinleri')));
   const lab = [...document.querySelectorAll('#search-results a')].find(link => link.getAttribute('href').includes('bellek-izinleri'));
   assert.equal(new URL(lab.getAttribute('href'), 'https://test.local').searchParams.get('highlight'), 'mprotect');
-  assert.match(document.getElementById('search-status').textContent, /sonuç/);
+  assert.match(document.getElementById('search-status').textContent, /results/);
   input.value = 'rastgeleyok123'; input.dispatchEvent(new window.Event('input'));
   assert.equal(document.querySelectorAll('#search-results a').length, 0);
-  assert.match(document.getElementById('search-status').textContent, /Sonuç bulunamadı/);
+  assert.match(document.getElementById('search-status').textContent, /No results found/);
   search.close();
   assert.equal(document.getElementById('site-search').hasAttribute('open'), false);
   await search.load();
@@ -67,8 +67,8 @@ test('failed search offers a real retry and recovers', async () => {
     return { ok: true, json: async () => index };
   });
   await search.load();
-  assert.match(document.getElementById('search-status').textContent, /yüklenemedi/);
-  assert.equal(document.querySelector('#search-results button').textContent, 'Yeniden dene');
+  assert.match(document.getElementById('search-status').textContent, /could not be loaded/);
+  assert.equal(document.querySelector('#search-results button').textContent, 'Try again');
   await search.load();
   assert.equal(attempts, 2);
   assert.ok(document.querySelector('#search-results a'));

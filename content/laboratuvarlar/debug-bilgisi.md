@@ -1,16 +1,16 @@
 ---
-title: "Debug bilgisini ayırmak, strip etmek ve geri bağlamak"
+title: Separating, stripping, and reconnecting debug information
 ---
 
-# Debug bilgisini ayırmak, strip etmek ve geri bağlamak
+# Separating, stripping, and reconnecting debug information
 
-Modern yazılım dağıtımlarında (Red Hat, Ubuntu, Debian), performans ve disk tasarrufu sağlamak amacıyla son kullanıcılara sembolleri ve DWARF hata ayıklama bilgileri temizlenmiş (`stripped`) ikili dosyalar sunulur. Ancak hata raporlama ve çökme analizi gerektiğinde, ayrı paketlerde tutulan (`-dbgsym` / `debuginfo`) hata ayıklama dosyaları ikiliye harici olarak geri bağlanır.
+Distributions such as Red Hat, Ubuntu, and Debian commonly ship binaries with ordinary symbols and DWARF debug information removed to reduce distribution size. Separate debug files (`-dbgsym` / `debuginfo`) can be reconnected for bug reports and crash analysis.
 
-Bu laboratuvar; bir ikili dosyanın debug verisini `objcopy` ile bağımsız bir dosyaya ayırmayı, ana dosyayı `strip` etmeyi ve `.gnu_debuglink` mekanizması ile GDB'nin bu iki parçayı nasıl otomatik olarak birleştirdiğini adım adım inceler.
+This laboratory separates debug data with `objcopy`, strips the main file, and examines how `.gnu_debuglink` lets GDB reconnect the two.
 
-## 1. Deney Kodunun Hazırlanması
+## 1. Prepare the program
 
-Basit bir döngü ve yerel değişkenler içeren `hesap.c` dosyası:
+Create `hesap.c`, with a small loop and local variables:
 
 ```c
 #include <stdio.h>
@@ -24,74 +24,71 @@ int main(void) {
     int x = 10;
     int y = 20;
     int toplam = topla(x, y);
-    printf("Toplam: %d\n", toplam);
+    printf("Total: %d\n", toplam);
     return 0;
 }
 ```
 
-## 2. Programın Debug Sembolleriyle Derlenmesi
+## 2. Compile with debug information
 
-Programı zengin DWARF formatında (`-g3`) derleyin:
+Use `-g3` to include rich DWARF information:
 
 ```bash
 gcc -Wall -Wextra -O0 -g3 hesap.c -o hesap
 ```
 
-Dosya boyutunu ve sembol durumunu kontrol edin:
+Check file size and symbol status:
 
 ```bash
 ls -lh hesap
 file hesap
 ```
-`file` çıktısında `with debug_info, not stripped` ifadesini görmelisiniz.
 
-## 3. Debug Verisini Ayırma ve Strip Etme
+Expect `with debug_info, not stripped` in the `file` output.
 
-Standart GNU Binutils araçlarıyla debug verisini izole edin:
+## 3. Separate debug data and strip the binary
+
+Use GNU binutils:
 
 ```bash
-# 1. Debug bölümlerini bağımsız bir 'hesap.debug' dosyasına aktar:
+# 1. Extract debug sections into a separate 'hesap.debug' file:
 objcopy --only-keep-debug hesap hesap.debug
 
-# 2. Ana dosyayı tamamen strip et (tüm semboller ve debug bölümleri silinir):
+# 2. Remove debug data and ordinary symbols (dynamic linking entries may remain):
 strip --strip-debug --strip-unneeded hesap
 
-# 3. Ana ikilinin içine debug dosyasının adını ve CRC32 sağlamasını göm:
+# 3. Embed the debug filename and CRC-32 in the main binary:
 objcopy --add-gnu-debuglink=hesap.debug hesap
 ```
 
-Şimdi tekrar kontrol edin:
-- `ls -lh hesap hesap.debug`: `hesap` dosyasının boyutunun belirgin şekilde küçüldüğünü göreceksiniz.
-- `file hesap`: Artık `stripped` olarak raporlanacaktır.
-- `readelf -S hesap`: `.debug_*` bölümlerinin kaybolduğunu, yerine `.gnu_debuglink` bölümünün eklendiğini görebilirsiniz.
+Inspect the result:
+
+- `ls -lh hesap hesap.debug`: The `hesap` file should be smaller.
+- `file hesap`: It should now be reported as `stripped`.
+- `readelf -S hesap`: `.debug_*` sections should be gone and `.gnu_debuglink` present.
 
 ```bash
 readelf -x .gnu_debuglink hesap
 ```
 
-Örnek çıktı:
-```text
-Hex dump of section '.gnu_debuglink':
-  0x00000000 68657361 702e6465 62756700 00000000 hesap.debug.....
-  0x00000010 3a5b81c2                            :[..
-```
-Son 4 bayt (`3a5b81c2`), `hesap.debug` dosyasının CRC32 kontrol toplamıdır. Eğer debug dosyası sonradan değiştirilirse GDB uyumsuzluk uyarısı verir.
+The `.gnu_debuglink` layout is a NUL-terminated filename, 0–3 padding bytes to the next four-byte boundary, then a CRC-32 in the target ELF's byte order. `hesap.debug\0` occupies 12 bytes, so the CRC starts at `0x0c`, not `0x10`. Its value depends on the actual debug file; no GNU objcopy dump was measured during this revision. Once GDB finds the file through its name/path search, it checks the CRC too.
 
-## 4. GDB ile Otomatik Sembol Eşleştirmesini Doğrulamak
+## 4. Verify automatic matching with GDB
 
-Ana dosyayı GDB ile çalıştırın:
+Open the main binary:
 
 ```bash
 gdb -q ./hesap
 ```
 
-GDB başlarken şu mesajı gösterecektir:
+If GDB finds the matching debug file, expect a message similar to this schematic example:
+
 ```text
 Reading symbols from ./hesap...
 Reading symbols from /path/to/hesap.debug...
 ```
 
-Artık dosya stripped olmasına rağmen kaynak kod satır numaraları ve fonksiyon adları kusursuzca görüntülenebilir:
+Even though the working binary is stripped, source lines and function names become available when matching debug data is loaded:
 
 ```bash
 (gdb) break topla
@@ -101,23 +98,24 @@ Artık dosya stripped olmasına rağmen kaynak kod satır numaraları ve fonksiy
 (gdb) print b
 ```
 
-GDB, `.gnu_debuglink` içindeki dosya adını okumuş, aynı dizindeki veya `/usr/lib/debug/` altındaki `hesap.debug` dosyasını bularak sembolleri belleğe yüklemiştir.
+GDB's `.gnu_debuglink` search includes the executable directory, its `.debug` subdirectory, and paths under global debug directories corresponding to the executable's absolute directory. Verify actual loading in your session.
 
-## 5. Build-ID Tabanlı Eşleştirme
+## 5. Build-ID matching
 
-Modern sistemlerde dosya adına bağımlı kalmamak için **Build-ID** kullanılır (`.note.gnu.build-id`). GDB, bir ikilinin SHA-1 özetini alarak şu dizinde arama yapar:
+GDB reads the embedded Build-ID rather than hashing the entire executable with SHA-1 again. It looks for matching identity in separate debug data. For this **schematic 20-byte identifier**:
 
 ```text
-/usr/lib/debug/.build-id/ab/1234567890abcdef.debug
+ab1234567890abcdef1234567890abcdef123456
+/usr/lib/debug/.build-id/ab/1234567890abcdef1234567890abcdef123456.debug
 ```
 
-Burada ilk 2 bayt dizin adı (`ab`), kalan baytlar ise debug dosyasının adıdır. Bu sayede dosya adı veya konumu değişse bile semboller daima doğru ikiliyle eşleşir.
+The first **two hexadecimal characters form one byte** (`ab`) and become the directory name; the remaining 38 characters become the filename. Build-ID is optional, with length/style depending on the linker. It does not guarantee matching debug contents on every server or represent the file's current checksum after modification. Check [GDB's search rules](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html).
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Sembolleri tamamen bulunmayan ikililerde analiz yöntemlerini kavramak için [Stripped ELF](../rehberler/stripped-elf.md) rehberine geçin. Derleyici optimizasyonlarının kod yapısını nasıl değiştirdiğini görmek için [Derleme farkları laboratuvarı](derleme-farklari.md) uygulamasını yapın.
+Read [stripped ELF](../rehberler/stripped-elf.md) for analysis without ordinary symbols. Use the [compiler differences laboratory](derleme-farklari.md) to investigate optimization's effect on code structure.
 
-## Kaynaklar
+## Sources
 
 - [GDB: Separate Debug Files](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html)
 - [objcopy — Binutils Documentation](https://sourceware.org/binutils/docs/binutils/objcopy.html)

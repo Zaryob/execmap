@@ -1,100 +1,104 @@
 ---
-title: "eBPF ile çalışma anı olaylarını izlemek"
+title: Observing runtime events with eBPF
 ---
 
-# eBPF ile çalışma anı olaylarını izlemek
+# Observing runtime events with eBPF
 
-Klasik hata ayıklayıcılar (`gdb`, `strace`) süreçleri durdurmak ve sistem çağrılarını izlemek için `ptrace()` sistem çağrısını kullanır. Ancak modern zararlı yazılımlar ve korumalı ikili dosyalar, `ptrace` varlığını kolayca tespit ederek çalışmasını durdurabilir veya sahte kod yollarına sapabilir.
+Traditional tools such as `gdb` and `strace` use `ptrace()` to stop processes and inspect execution or system calls. Malware and protected binaries may detect this relationship, stop running, or follow decoy paths.
 
-**eBPF (Extended Berkeley Packet Filter)**, Linux çekirdeğinin içinde güvenli ve kumhavuzlu (sandboxed) bayt kod çalıştıran devrimsel bir sanal makinedir. eBPF sayesinde bir ikili dosyanın sistem çağrılarını, bellek eşlemelerini ve hatta kullanıcı alanı fonksiyonlarını (uprobes), **hedef sürece hiç dokunmadan ve hedef süreç tarafından fark edilmeden** çekirdek seviyesinde izlemek mümkündür.
+**eBPF** collects events through programs verified by the Linux kernel. It can observe syscall tracepoints or user functions without creating a ptrace relationship, but this does not guarantee invisibility or zero cost. Uprobes, tracepoints, and kprobes are distinct mechanisms. Linux v6.12 x86 uprobes can place a `0xcc` software breakpoint in the target address space ([opcode definition](https://github.com/torvalds/linux/blob/v6.12/arch/x86/include/asm/uprobes.h), [implementation](https://github.com/torvalds/linux/blob/v6.12/kernel/events/uprobes.c)).
 
-## 1. eBPF Gözlem Mimarisi: Tracepoints, Kprobes ve Uprobes
+## 1. Tracepoints, kprobes, and uprobes
 
-eBPF, sistemin farklı katmanlarına dinamik kancalar (hooks) atabilir:
+eBPF can attach observation programs at different system layers:
 
 ```text
-Kullanıcı Alanı (Userspace)
-  [Hedef Süreç: ornek] --------> [libc.so / malloc]
-           |                            |
-           v (uprobe)                   v (uprobe)
+User space
+  [Target: ornek] -----------> [libc.so / malloc]
+         |                             |
+         v (uprobe)                    v (uprobe)
 +-------------------------------------------------------+
-| Linux Çekirdeği (Kernel Space)                        |
+| Linux kernel                                          |
 |                                                       |
-|  [Syscall Katmanı] ----> Tracepoint: sys_enter_mmap   |
-|  [VFS / Dosya]     ----> Kprobe: vfs_read             |
-|  [Bellek Yönetimi] ----> Kprobe: do_mprotect_pkey     |
+| [Syscalls] -------> Tracepoint: sys_enter_mmap          |
+| [VFS / files] ----> Kprobe: vfs_read                    |
+| [Memory] ---------> Kprobe: do_mprotect_pkey            |
 |                                                       |
-|  +-------------------------------------------------+  |
-|  | eBPF Programı (Çekirdekte doğrulanmış bayt kod)|  |
-|  +-------------------------------------------------+  |
+| +---------------------------------------------------+ |
+| | eBPF program (kernel-verified bytecode)             | |
+| +---------------------------------------------------+ |
 |                         |                             |
-|                         v BPF Ring Buffer             |
+|                         v BPF ring buffer             |
 +-------------------------------------------------------+
                           |
                           v
-Kullanıcı Alanı Gözlemcisi (bpftrace / libbpf / EDR)
+User-space observer (bpftrace / libbpf / EDR)
 ```
 
-- **Tracepoints**: Çekirdeğin içine statik olarak yerleştirilmiş kararlı olay noktalarıdır (örneğin `tracepoint:syscalls:sys_enter_mprotect`).
-- **Kprobes / Kretprobes**: Çekirdekteki hemen hemen her iç fonksiyonun girişine ve dönüşüne dinamik kanca atılmasını sağlar.
-- **Uprobes / Uretprobes**: Kullanıcı alanındaki bir ikili dosyanın veya paylaşımlı kütüphanenin belirli bir sanal adresine veya sembolüne çekirdek tarafından yerleştirilen kancadır.
+- **Tracepoints**: Statically defined kernel event points, such as `tracepoint:syscalls:sys_enter_mprotect`.
+- **Kprobes / kretprobes**: Dynamic probes at supported kernel locations, subject to prohibited locations and configuration limits.
+- **Uprobes / uretprobes**: Kernel-managed probes for locations or symbols in a user executable or shared library.
 
-## 2. bpftrace ile Pratik İzleme Senaryoları
+## 2. Practical bpftrace scenarios
 
-Tek satırlık `bpftrace` komutlarıyla hedef süreci hiçbir şekilde yavaşlatmadan adli analiz yapabilirsiniz:
+These examples require Linux syscall tracepoints, appropriate BPF privileges, and bpftrace. First record `bpftrace --version`, `uname -r`, and `sudo bpftrace -lv "tracepoint:syscalls:sys_enter_mprotect"`. Confirm field names in that output; measure overhead and dropped records separately.
 
-### Senaryo A: Anonim Bellek Açan ve İzin Değiştiren Süreçleri Yakalamak
-Paketleyicilerin ve kabuk kodlarının (shellcode) tipik davranışı olan `mmap` ve `mprotect` çağrılarını anında yakalayan betik:
+### Scenario A: processes mapping anonymous memory and changing permissions
+
+The script below observes `mmap` and `mprotect`, calls often involved in packing and shellcode allocation:
 
 ```bash
 sudo bpftrace -e '
 tracepoint:syscalls:sys_enter_mprotect /comm == "ornek"/ {
-    printf("[PID %d] mprotect(addr=0x%lx, len=%d, prot=0x%x)\n",
+    printf("[PID %d] mprotect(addr=0x%lx, len=%lu, prot=0x%x)\n",
            pid, args.start, args.len, args.prot);
 }
 '
 ```
 
-Örnek terminal çıktısı:
+The output **schema**, not an executed trace:
+
 ```text
-Attaching 1 probe...
-[PID 24102] mprotect(addr=0x7f9a1b2000, len=4096, prot=0x5) => PROT_READ | PROT_EXEC !
+[PID <pid>] mprotect(addr=0x<address>, len=<length>, prot=0x<permissions>)
 ```
 
-### Senaryo B: Stripped İkilide Fonksiyona uprobe Takmak
-Sembolleri tamamen silinmiş bir ikili dosyada dahi, fonksiyonun dosya ofsetini belirledikten sonra doğrudan o adrese bir uprobe yerleştirebilirsiniz:
+On Linux, `prot=0x5` requests READ|EXEC. An entry event does not establish success or execution; correlate the `sys_exit_mprotect` result with the same thread. A `comm` filter matches a name; use a PID filter to distinguish processes sharing that name.
+
+### Scenario B: attaching a uprobe in a stripped binary
+
+Check how your bpftrace version interprets numeric uprobe addresses: a virtual address and a file offset need not have the same numeric value. Here `0x1140` is an illustrative location converted into the address form expected by the version in use. Verify the instruction boundary and attachment result in the actual file. `reg("di")` is specific to x86-64:
 
 ```bash
-# ornek ikilisinin 0x1140 ofsetindeki fonksiyonuna uprobe bağla:
+# After verifying the location for the file and bpftrace version:
 sudo bpftrace -e '
 uprobe:/usr/bin/ornek:0x1140 {
-    printf("Hedef fonksiyon cagirildi! RDI argumani: %d\n", reg("di"));
+    printf("Target function called! RDI argument: %d\n", reg("di"));
 }
 '
 ```
 
-## 3. eBPF Neden Tespit Edilemez (Evasion Resistant)?
+## 3. Observer effects and detection limits
 
-Geleneksel analiz araçları hedef sürecin adres uzayına kod enjekte eder (`LD_PRELOAD`), sinyal gönderir (`SIGTRAP`) veya ptrace ile süreci durdurur.
+Tools have different effects. `LD_PRELOAD` changes loaded objects and symbol selection; ptrace-based tools establish a tracing relationship and may stop the process.
 
-eBPF ile gözlemin etkisi bağlanma türüne göre değerlendirilmelidir. Tracepoint, kprobe ve uprobe aynı mekanizma değildir; uprobes hedef komut konumunda breakpoint kullanabilir. `TracerPid: 0` yalnızca ptrace ilişkisini sınar ve başka gözlem yöntemlerini dışlamaz. Olay üretimi, tampon doluluğu ve tüketici hızı zamanlamayı etkileyebilir.
+Assess eBPF observation by attachment type. Tracepoints, kprobes, and uprobes are not the same mechanism; uprobes may use breakpoints at target instructions. `TracerPid: 0` only tests a ptrace relationship and does not exclude other observation methods. Event production, buffer occupancy, and consumer speed can affect timing.
 
-## 4. eBPF'in Kötüye Kullanımı ve Evasion Tartışmaları
+## 4. eBPF misuse and evasion
 
-eBPF programlarının yapabilecekleri program türüne, izinlere ve çekirdek yapılandırmasına bağlıdır. Örneğin [bpf-helpers(7)](https://man7.org/linux/man-pages/man7/bpf-helpers.7.html), `bpf_probe_write_user` yardımcısının kullanım koşullarını ve sınırlarını açıklar. Bir olay kaydını yorumlarken sistemdeki mevcut programları da inceleyin.
+BPF capabilities depend on program type, permissions, and kernel configuration. For example, [bpf-helpers(7)](https://man7.org/linux/man-pages/man7/bpf-helpers.7.html) documents conditions and limits for `bpf_probe_write_user`. Inspect existing programs when interpreting an event record.
 
-Tersine mühendislik uzmanı, sistemdeki eBPF programlarını ve haritalarını denetlemek için `bpftool` aracını kullanmalıdır:
+Use `bpftool` to inspect the system's BPF programs and maps:
 
 ```bash
-# Sistemde çalışan eBPF programlarını listele:
+# List BPF programs loaded on the system:
 sudo bpftool prog list
 ```
 
-## İncelemeyi Derinleştir
+## Investigate further
 
-Hedef programın analiz araçlarını algılamak için hangi hilelere başvurduğunu anlamak için [Analiz aracının etkisi](analiz-aracinin-etkisi.md) rehberini inceleyin. Toplanan izleri doğru hipotezlerle birleştirmek için [İzleri yorumlamak](izleri-yorumlamak.md) bölümünü okuyun.
+Read [observer effects](analiz-aracinin-etkisi.md) to understand how targets detect analysis tools. Continue with [interpreting traces](izleri-yorumlamak.md) to connect records to properly bounded hypotheses.
 
-## Kaynaklar
+## Sources
 
 - [Kernel: libbpf overview](https://docs.kernel.org/bpf/libbpf/libbpf_overview.html)
 - [Kernel: BPF ring buffer](https://docs.kernel.org/bpf/ringbuf.html)
