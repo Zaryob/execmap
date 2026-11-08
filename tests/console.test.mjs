@@ -28,10 +28,10 @@ test('shared console theme persists choice, toggles compact menu and copies code
   const context = {
     document,
     URLSearchParams,
-    window: { matchMedia, addEventListener() {}, ZaryobI18n: { t: text => ({ Copy: 'Copy', Copied: 'Copied' })[text] || text, apply() {} } },
+    window: { matchMedia, addEventListener() {} },
     matchMedia,
     localStorage: { getItem: () => stored, setItem: (key, value) => { assert.equal(key, 'zaryob-theme'); stored = value; } },
-    location: { search: '' },
+    location: { search: '?lang=tr' },
     navigator: { clipboard: { writeText: async text => { copied = text; } } },
     setTimeout() {},
   };
@@ -45,12 +45,15 @@ test('shared console theme persists choice, toggles compact menu and copies code
   const menu = document.querySelector('[data-console-menu]');
   menu.click();
   assert.equal(menu.getAttribute('aria-expanded'), 'true');
+  assert.equal(menu.getAttribute('aria-label'), 'Close menu');
   assert.equal(document.getElementById('console-navigation').classList.contains('is-open'), true);
   menu.click();
   assert.equal(menu.getAttribute('aria-expanded'), 'false');
+  assert.equal(menu.getAttribute('aria-label'), 'Open menu');
   const code = document.querySelector('pre > code');
   const copy = document.querySelector('.console-copy');
   assert.ok(copy);
+  assert.equal(copy.textContent, 'Copy');
   copy.click();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(copied, code.textContent);

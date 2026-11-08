@@ -111,8 +111,17 @@ GDB laboratories. The suite adapter `search.json` publishes `type: "execmap/"`,
 should preserve that content-language field. The local `search-index.json`
 also carries code and heading fields for ranking phrase and code queries.
 There is no Turkish content variant or language selector; saved language
-preferences and `?lang=tr` leave the English product intact. Shared-suite
-consumer changes and canonical asset synchronization are maintained separately.
+preferences and `?lang=tr` leave the English product intact.
+
+All files in `public/assets/console/` are byte-identical copies from
+`console-theme/assets/console/`; `theme.js` has English fallbacks and the SVG
+license notice references its bundled sibling `ICONS-LICENSE.txt`. Sync and
+verify from the sibling `console-theme` repository with `python3 scripts/sync.py`
+and `npm run check`. The registry is copied unchanged to
+`public/console-projects.json`. The Node build is the packaging adapter: it
+renders English markup/local search without Jekyll includes, a language
+selector, or loading the distributed preference/vocabulary scripts. Shared
+search consumers must retain the `lang: "en"` metadata emitted by this build.
 
 ## Repository layout
 

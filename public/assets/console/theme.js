@@ -24,7 +24,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const { t, apply: applyLanguage } = window.ZaryobI18n || {
-      t: text => text,
+      t: (text, values = {}) => text.replace(/\{(\w+)\}/g, (match, key) => Object.hasOwn(values, key) ? String(values[key]) : match),
       apply: () => {},
     };
     document.querySelectorAll('[data-console-theme]').forEach(select => {
@@ -228,7 +228,7 @@
       const records = await response.json();
       if (!Array.isArray(records)) throw new Error('Invalid execmap index');
       return records.filter(record => typeof record.title === 'string' && typeof record.url === 'string')
-        .map(record => ({ ...record, type: 'execmap/', lang: 'tr' }));
+        .map(record => ({ ...record, type: 'execmap/' }));
     }).catch(error => { execmapIndex = undefined; throw error; });
     const matchRecords = (records, query) => {
       const terms = normalize(query).split(/\s+/).filter(Boolean);
