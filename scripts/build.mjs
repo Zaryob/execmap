@@ -104,8 +104,18 @@ function home() {
 }
 function sidebar(current) {
   const active = id => id === current ? ' aria-current="page"' : '';
-  return `<aside lang="en" class="reading-sidebar" aria-label="Guide directory"><details class="sidebar-menu" open><summary>Contents ${icon('chevron', 14)}</summary><div class="sidebar-links"><a class="sidebar-home" href="${url('index')}">← Investigation desk</a>${sections.map(section => `<div class="sidebar-group"><p>${section.label} / ${section.name}</p>${section.pages.map(slug => byId.get(`rehberler/${slug}`)).map(page => `<a href="${url(page.id)}"${active(page.id)}>${e(page.title)}</a>`).join('')}</div>`).join('')}<div class="sidebar-group"><p>04 / Labs</p>${labs.map(page => `<a href="${url(page.id)}"${active(page.id)}>${e(page.title)}</a>`).join('')}</div><div class="sidebar-group"><p>05 / Reading desk</p>${['okuma-rotalari', 'kaynak-kutuphanesi', 'kaynaklar'].map(id => `<a href="${url(id)}"${active(id)}>${e(byId.get(id).title)}</a>`).join('')}</div></div></details></aside>`;
+  const treeIcon = (name, className = 'tree-icon', sheet = 'regular') => `<svg class="${className}" aria-hidden="true"><use href="${asset(`assets/console/${sheet}.svg`)}#${name}"></use></svg>`;
+  const file = (page, className = '') => `<a href="${url(page.id)}"${className ? ` class="${className}"` : ''}${active(page.id)}>${treeIcon('file')}<span>${e(page.title)}</span></a>`;
+  const branch = (label, name, items) => {
+    const selected = items.some(page => page.id === current);
+    return `<details class="sidebar-group tree-group${selected ? ' is-current' : ''}"${selected ? ' open' : ''}><summary>${treeIcon('folder', 'tree-icon tree-folder-closed')}${treeIcon('folder-open', 'tree-icon tree-folder-open')}<span class="tree-group-name">${e(label)} / ${e(slugify(name))}/</span>${treeIcon('chevron-down', 'tree-chevron', 'site')}</summary><div class="tree-children">${items.map(page => file(page)).join('')}</div></details>`;
+  };
+  const branches = sections.map(section => branch(section.label, section.name, section.pages.map(slug => byId.get(`rehberler/${slug}`))));
+  branches.push(branch('04', 'Labs', labs), branch('05', 'Reading desk', ['okuma-rotalari', 'kaynak-kutuphanesi', 'kaynaklar'].map(id => byId.get(id))));
+  const home = { id: 'index', title: 'README.md' };
+  return `<aside lang="en" class="reading-sidebar" aria-label="Guide directory"><details class="sidebar-menu" open><summary>${treeIcon('guides', 'tree-icon tree-root-icon', 'site')}<span>Contents</span>${treeIcon('chevron-down', 'tree-chevron', 'site')}</summary><nav class="sidebar-links" aria-label="Reading tree">${file(home, 'tree-index')}${branches.join('')}</nav></details></aside>`;
 }
+
 function article(page) {
   const { html, toc } = renderMarkdown(page);
   const ordered = page.kind === 'laboratuvar' ? labs : guides;
