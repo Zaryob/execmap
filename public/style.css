@@ -77,11 +77,7 @@
 .source-banner p:not(.eyebrow) { color: var(--muted); font-size: var(--text-sm); margin: 0; line-height: 1.9; }
 .source-banner > a { font-size: var(--text-sm); display: inline-flex; gap: 18px; align-items: center; flex-shrink: 0; }
 .source-banner .eyebrow { margin-bottom: 7px; }
-.execmap-site .console-suite { width: 100%; margin-top: auto; }
-.execmap-site .console-suite + .console-footer { margin-top: 0; }
-.execmap-site .console-footer { width: 100%; margin-top: auto; padding-inline: var(--gutter); line-height: 1.9; }
-.footer-links { display: flex; gap: 20px; align-items: start; flex-wrap: wrap; }
-.footer-sep { color: var(--line); margin: 0 6px; }.footer-note { color: var(--muted); }
+.execmap-site .suite-footer { width: 100%; margin-top: auto; }
 .breadcrumbs { display: flex; flex-wrap: wrap; gap: 7px 10px; font-size: var(--text-xs); color: var(--muted); margin: 0 0 25px; overflow-wrap: anywhere; }
 .breadcrumbs a { text-decoration: none; }
 .breadcrumbs > span:last-child { color: var(--muted); }
@@ -225,10 +221,10 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .prose { font-size: var(--text-prose); }.prose h2 { font-size: 1.2rem; }.prose .heading-anchor { opacity: 1; }
   .mobile-toc .toc-details ol { columns: 1; }.prose pre { font-size: var(--text-xs); }.execmap-site .console-copy { top: -40px; right: 8px; }
   .page-neighbors { gap: 18px; }.page-neighbors a { font-size: var(--text-xs); }
-  .footer-links { gap: 16px; }.legal-main { padding-top: 32px; }
+  .legal-main { padding-top: 32px; }
 }
 @media print {
-  .console-header,.console-footer,.reading-sidebar,.reading-toc,.mobile-toc,.page-neighbors,.console-copy,.heading-anchor,.article-meta a { display: none !important; }
+  .console-header,.suite-footer,.reading-sidebar,.reading-toc,.mobile-toc,.page-neighbors,.console-copy,.heading-anchor,.article-meta a { display: none !important; }
   .reading-layout { display: block; }.reading-main { padding: 0; }.prose pre { white-space: pre-wrap; overflow-wrap: anywhere; }.console-site { --paper: white; --ink: black; --muted: #444; --line: #ccc; }
 }
 
