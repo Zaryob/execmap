@@ -24,7 +24,7 @@ cat /proc/sys/kernel/perf_event_paranoid >> env.txt
 
 Save this as `hotspot.c`. It has four stages, each in its own non-inlined function so that every stage gets a name in the profile. It also measures each stage with its own clock and prints the times to standard error: you will compare perf's view with the program's own view.
 
-```c
+```c hotspot.c
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>

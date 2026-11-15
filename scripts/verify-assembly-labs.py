@@ -21,7 +21,7 @@ OUT = ROOT / 'output' / 'assembly-validation'
 
 
 def blocks(markdown, language):
-    return re.findall(r'^```' + language + r'\n(.*?)^```', markdown, re.M | re.S)
+    return re.findall(r'^```' + language + r'(?: [A-Za-z0-9_.-]+\.[A-Za-z0-9]+)?\n(.*?)^```', markdown, re.M | re.S)
 
 
 def run(args, *, timeout=20):

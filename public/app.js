@@ -162,9 +162,39 @@ export function initReading(doc = document) {
   }
 }
 
+// Long code blocks start folded to their first lines; without JavaScript,
+// in search highlights and in print they stay complete.
+export function initCodeBlocks(doc = document, search = doc.defaultView?.location?.search || '') {
+  const terms = (new URLSearchParams(search).get('highlight') || '').toLowerCase().split(/\s+/).filter(Boolean);
+  doc.querySelectorAll('.code-block[data-code-fold]').forEach((block, index) => {
+    const pre = block.querySelector('pre');
+    if (!pre || block.querySelector('.code-fold-toggle')) return;
+    const lines = Number(block.dataset.codeFold);
+    pre.id ||= `code-block-${index + 1}`;
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = 'code-fold-toggle';
+    button.setAttribute('aria-controls', pre.id);
+    const render = folded => {
+      block.classList.toggle('is-folded', folded);
+      button.setAttribute('aria-expanded', String(!folded));
+      button.textContent = folded ? `Show all ${lines} lines ↓` : 'Collapse ↑';
+    };
+    button.addEventListener('click', () => {
+      const folding = !block.classList.contains('is-folded');
+      render(folding);
+      if (folding) block.scrollIntoView({ block: 'nearest' });
+    });
+    block.append(button);
+    // Keep a block open when the reader arrives through a search highlight inside it.
+    const code = (pre.querySelector('code')?.textContent || '').toLowerCase();
+    render(!terms.some(term => code.includes(term)));
+  });
+}
+
 export function boot(doc = document) {
   doc.querySelectorAll('[data-js-only]').forEach(element => { element.hidden = false; });
-  initCatalog(doc); initSearch(doc); initReading(doc);
+  initCatalog(doc); initSearch(doc); initReading(doc); initCodeBlocks(doc);
 }
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => boot(), { once: true });

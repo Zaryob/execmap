@@ -191,6 +191,14 @@ korumalıdır. Yerel `search-index.json`, ifade ve kod sorgularını sıralamak 
 başlık alanlarını da taşır. Türkçe içerik sürümü veya dil seçici yoktur; kayıtlı dil
 tercihleri ve `?lang=tr` İngilizce ürünü değiştirmez.
 
+Etiketi bir dosya adı olan kod bloğu, örneğin ` ```c hotspot.c `, editör
+görünümünde çizilir: dosya sekmesi, kopyalanan metne karışmayan satır numarası
+sütunu ve aynı Markdown'dan `code/<sayfa-kimliği>/<dosya>` altında yayımlanan bir
+indirme bağlantısı. C, C++, Python, assembly ve JSON blokları numaralanır; kabuk
+blokları numaralanmaz. 30 satırdan uzun bloklar JavaScript çalışınca katlı
+açılır; JavaScript olmadan, yazdırmada ve arama vurgusu bloğun içindeyken tam
+görünür. Doğrulama betikleri iki çit biçimini de kabul eder.
+
 `public/assets/console/` içindeki bütün dosyalar `console-theme/assets/console/`
 dizininden bayt bayt aynı kopyalardır; `theme.js` İngilizce yedek metinler içerir ve SVG
 lisans notu yanındaki `ICONS-LICENSE.txt` dosyasını gösterir. Eşitleme ve doğrulamayı

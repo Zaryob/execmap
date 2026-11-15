@@ -24,7 +24,7 @@ def run(name, cmd, expected=0, env=None, timeout=30):
 def source(page, lang='c', index=0):
     path = ROOT / 'content' / (page + '.md')
     raw = path.read_text(); report['sources'][str(path.relative_to(ROOT))] = hashlib.sha256(raw.encode()).hexdigest()
-    return re.findall(r'```' + lang + r'\n(.*?)\n```', raw, re.S)[index] + '\n'
+    return re.findall(r'```' + lang + r'(?: [A-Za-z0-9_.-]+\.[A-Za-z0-9]+)?\n(.*?)\n```', raw, re.S)[index] + '\n'
 
 def write(name, data):
     (OUT / name).write_text(data)

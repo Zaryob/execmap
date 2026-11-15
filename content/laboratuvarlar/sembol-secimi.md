@@ -25,7 +25,7 @@ Keep running the commands from this directory. The example's library paths refer
 
 Save the first library as `liba.c`. Its `secim` function returns 11:
 
-```c
+```c liba.c
 #include <stdio.h>
 
 int secim(void) {
@@ -35,7 +35,7 @@ int secim(void) {
 
 Save the replacement library as `libb.c`. It defines the same function name but returns 22:
 
-```c
+```c libb.c
 #include <stdio.h>
 
 int secim(void) {
@@ -45,7 +45,7 @@ int secim(void) {
 
 Save the main program as `ana.c`. It calls `secim` without defining that function itself:
 
-```c
+```c ana.c
 #include <stdio.h>
 
 // Declaration of an external function

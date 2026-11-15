@@ -23,7 +23,7 @@ uname -r | tee -a env.txt
 
 Save this as `worker.c`:
 
-```c
+```c worker.c
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <fcntl.h>

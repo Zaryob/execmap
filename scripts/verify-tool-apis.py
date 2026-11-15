@@ -29,7 +29,7 @@ WORK.mkdir(parents=True, exist_ok=True)
 
 def block(page, language):
     text = (ROOT / 'content' / page).read_text()
-    return re.findall(r'^\s*```' + language + r'\n(.*?)^\s*```', text, re.M | re.S)[0]
+    return re.findall(r'^\s*```' + language + r'(?: [A-Za-z0-9_.-]+\.[A-Za-z0-9]+)?\n(.*?)^\s*```', text, re.M | re.S)[0]
 
 
 args = argparse.ArgumentParser(description=__doc__)

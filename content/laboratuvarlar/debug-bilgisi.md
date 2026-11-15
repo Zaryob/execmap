@@ -23,7 +23,7 @@ cd ~/execmap-labs/debug-information
 
 Save this as `hesap.c`:
 
-```c
+```c hesap.c
 #include <stdio.h>
 
 int topla(int a, int b) {

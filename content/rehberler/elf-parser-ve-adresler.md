@@ -14,7 +14,7 @@ This C11 program reads only **ELF64 little-endian** headers and `PT_LOAD` ranges
 
 The example accepts at most 64 MiB and reads the file into private memory. ELF32, big-endian data, section/relocation parsing, and complete Linux loadability checks are outside its scope. Acceptance does not mean the kernel can execute the file. Save it as `elf-envanter.c`:
 
-```c
+```c elf-envanter.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

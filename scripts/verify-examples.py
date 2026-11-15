@@ -22,7 +22,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 def blocks(page, language):
     text = (ROOT / 'content' / page).read_text()
-    return re.findall(r'^```' + language + r'\n(.*?)^```', text, re.M | re.S)
+    return re.findall(r'^```' + language + r'(?: [A-Za-z0-9_.-]+\.[A-Za-z0-9]+)?\n(.*?)^```', text, re.M | re.S)
 
 
 def run(args, **kw):

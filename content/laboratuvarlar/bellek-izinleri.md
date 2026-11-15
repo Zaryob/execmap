@@ -25,7 +25,7 @@ cd ~/execmap-labs/memory-permissions
 
 Create a file named `izin.c` with this content:
 
-```c
+```c izin.c
 #include <stdio.h>
 #include <sys/mman.h>
 #include <unistd.h>

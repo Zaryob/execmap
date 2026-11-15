@@ -26,7 +26,7 @@ Record the compiler, debugger, and architecture versions as shown in the first l
 
 Save this as `dallanma.c`:
 
-```c
+```c dallanma.c
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

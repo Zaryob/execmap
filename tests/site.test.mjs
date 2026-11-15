@@ -239,6 +239,24 @@ test('reading pages include complete code, source downloads, TOC and active navi
 });
 
 
+test('file code blocks render an editor tab, clean line numbers, folding and a matching download', async () => {
+  const { document } = parseHTML(await readFile(path.join(root, 'laboratuvarlar/cpu-profili.html'), 'utf8'));
+  const block = [...document.querySelectorAll('.code-block')].find(item => item.querySelector('.code-tab')?.textContent === 'hotspot.c');
+  assert.ok(block, 'hotspot.c tab');
+  const code = block.querySelector('pre > code');
+  const lines = code.textContent.split('\n').length;
+  assert.ok(code.textContent.startsWith('#define _POSIX_C_SOURCE'), 'line numbers must stay outside the copied code');
+  assert.equal(block.querySelector('.code-gutter').getAttribute('aria-hidden'), 'true');
+  assert.equal(block.querySelector('.code-gutter').textContent.split('\n').length, lines);
+  assert.equal(Number(block.dataset.codeFold), lines);
+  const href = block.querySelector('a.code-download').getAttribute('href');
+  assert.ok(href.endsWith('/code/laboratuvarlar/cpu-profili/hotspot.c'), href);
+  const published = await readFile(path.join(root, href.slice(`${base}/`.length)), 'utf8');
+  assert.equal(published, `${code.textContent}\n`);
+  const shell = [...document.querySelectorAll('.code-block')].find(item => item.querySelector('code.language-bash'));
+  assert.equal(shell.querySelector('.code-gutter'), null, 'shell commands stay unnumbered');
+});
+
 test('search text preserves code identifiers, operators and links without Markdown', () => {
   const source = '# Başlık\n\nBir **örnek**, `p_offset` ve [kaynak](https://example.com).\n\n```c\nif (x > 0) *ptr = PROT_READ;\n```';
   const text = plainText(source);

@@ -190,6 +190,14 @@ also carries code and heading fields for ranking phrase and code queries.
 There is no Turkish content variant or language selector; saved language
 preferences and `?lang=tr` leave the English product intact.
 
+A code fence whose label is a file name, such as ` ```c hotspot.c `, renders as
+an editor-style block: a file tab, a line-number gutter kept outside the
+copyable text, and a download published at `code/<page-id>/<file>` from the
+same Markdown. C, C++, Python, assembly, and JSON blocks are numbered; shell
+blocks are not. Blocks longer than 30 lines start folded when JavaScript runs
+and stay complete without it, in print, and when a search highlight falls
+inside them. The verification scripts accept both fence forms.
+
 All files in `public/assets/console/` are byte-identical copies from
 `console-theme/assets/console/`; `theme.js` has English fallbacks and the SVG
 license notice references its bundled sibling `ICONS-LICENSE.txt`. Sync and

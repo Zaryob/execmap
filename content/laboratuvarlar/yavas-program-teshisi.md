@@ -22,7 +22,7 @@ mkdir -p offcpu-diagnosis && cd offcpu-diagnosis
 
 Save this as `slowjobs.c`. Read only `main` for now: it starts a background thread, then computes and records 200 jobs.
 
-```c
+```c slowjobs.c
 #define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
 #include <stdatomic.h>

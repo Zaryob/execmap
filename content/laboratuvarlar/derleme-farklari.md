@@ -29,7 +29,7 @@ Keep these versions with your comparison. The exact transformations depend on th
 
 Save this as `opt.c`:
 
-```c
+```c opt.c
 #include <stdio.h>
 
 static int kare_al(int sayi) {

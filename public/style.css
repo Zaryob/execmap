@@ -239,6 +239,31 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .prose .admonition > :last-child { margin-bottom: 0; }
 .mobile-toc .toc-details:not([open]) summary { padding-bottom: 0; }
 
+
+/* Editor-style code blocks: file tab, line-number gutter, folding. */
+.prose .code-block { margin: 24px 0 26px; }
+.prose .code-block > .code-language { margin-top: 0; }
+.prose .code-block .console-code { margin-bottom: 0; }
+.code-file { gap: 12px; color: var(--muted); }
+.code-tab { align-self: stretch; display: inline-flex; align-items: center; margin: -5px 0 -5px -14px; padding: 0 14px; border-top: 2px solid var(--accent); border-right: 1px solid var(--line); background: var(--paper); color: var(--ink); font-weight: 600; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-info { white-space: nowrap; }
+.code-download { margin-left: auto; white-space: nowrap; color: var(--link); text-decoration: none; }
+.code-download:is(:hover, :focus-visible) { text-decoration: underline; }
+.execmap-site .prose pre.has-lines { display: grid; grid-template-columns: max-content minmax(max-content, 1fr); padding-inline-start: 0; }
+.code-gutter { position: sticky; left: 0; z-index: 1; margin-right: 16px; padding: 0 12px 0 14px; border-right: 1px solid var(--line); background: var(--surface); color: var(--muted); text-align: right; white-space: pre; user-select: none; -webkit-user-select: none; }
+.code-block.is-folded pre { max-height: calc(1.85em * 18); overflow-y: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent); mask-image: linear-gradient(to bottom, #000 72%, transparent); }
+.code-fold-toggle { display: block; width: 100%; min-height: 40px; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-top: 0; background: var(--surface); color: var(--link); font: var(--text-xs)/1.6 var(--font-mono); text-align: left; cursor: pointer; }
+.code-fold-toggle:is(:hover, :focus-visible) { background: var(--wash); text-decoration: underline; }
+@media (max-width: 700px) {
+  .code-info { display: none; }
+  .code-tab { max-width: 60%; }
+  .code-gutter { padding-inline: 8px; margin-right: 10px; }
+}
+@media print {
+  .code-gutter, .code-fold-toggle, .code-download { display: none !important; }
+  .execmap-site .prose pre.has-lines { display: block; padding-inline-start: 18px; }
+  .code-block.is-folded pre { max-height: none; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+}
 .home-main { width: 100%; min-width: 0; flex: 1; }
 .terminal-preview.console-hero__panel { align-self: center; }
 .terminal-body { font-size: var(--text-sm); }

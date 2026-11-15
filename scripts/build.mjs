@@ -21,6 +21,10 @@ const icon = (name, size = 18) => {
   const paths = { search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>', arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>', menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', chevron: '<path d="m6 9 6 6 6-6"/>', terminal: '<path d="m4 6 5 6-5 6m8 0h8"/>' };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
 };
+// Code blocks with a file name are also published as downloads.
+const codeFiles = [];
+const numberedLanguages = new Set(['c', 'cpp', 'python', 'x86asm', 'json']);
+const foldLines = 30;
 function renderMarkdown(page) {
   const toc = [];
   const seen = new Map();
@@ -38,12 +42,30 @@ function renderMarkdown(page) {
     },
     code({ text, lang }) {
       // Info string: a highlight.js language, then an optional display label
-      // (`text gdb` renders as plain text labelled "gdb").
+      // (`text gdb` renders as plain text labelled "gdb"). A label containing
+      // a dot or slash is a file name (`c hotspot.c`): the block gets an
+      // editor-style file tab, line numbers and a published download.
       const [language, label = language] = (lang || 'text').trim().split(/\s+/);
       const target = language === 'sh' ? 'bash' : language;
       if (!hljs.getLanguage(target)) throw new Error(`Unsupported code fence language "${language}" in ${page.id}`);
       const highlighted = hljs.highlight(text, { language: target }).value;
-      return `<div class="code-language">${e(label)}</div><pre tabindex="0" role="group" aria-label="${e(label)} code example"><code class="language-${e(language)}">${highlighted}</code></pre>\n`;
+      const lines = text.split('\n').length;
+      const fileName = /[./]/.test(label) ? label : null;
+      let download = '';
+      if (fileName) {
+        if (!/^[A-Za-z0-9_.-]+$/.test(fileName) || fileName.startsWith('.')) throw new Error(`Unsafe code file name "${fileName}" in ${page.id}`);
+        if (codeFiles.some(file => file.page === page.id && file.name === fileName)) throw new Error(`Duplicate code file "${fileName}" in ${page.id}`);
+        const published = `code/${page.id}/${fileName}`;
+        codeFiles.push({ page: page.id, name: fileName, path: published, text: text.endsWith('\n') ? text : `${text}\n` });
+        download = `<a class="code-download" href="${asset(published)}" download="${e(fileName)}" aria-label="Download ${e(fileName)}">Download ↓</a>`;
+      }
+      const numbered = fileName || numberedLanguages.has(target);
+      const gutter = numbered ? `<span class="code-gutter" aria-hidden="true">${Array.from({ length: lines }, (_, i) => i + 1).join('\n')}</span>` : '';
+      const head = fileName
+        ? `<div class="code-language code-file"><span class="code-tab" title="${e(fileName)}">${e(fileName)}</span><span class="code-info">${e(language)} · ${lines} lines</span>${download}</div>`
+        : `<div class="code-language">${e(label)}</div>`;
+      const foldable = lines > foldLines ? ` data-code-fold="${lines}"` : '';
+      return `<div class="code-block${numbered ? ' code-numbered' : ''}"${foldable}>${head}<pre tabindex="0" role="group" aria-label="${e(label)} code example"${numbered ? ' class="has-lines"' : ''}>${gutter}<code class="language-${e(language)}">${highlighted}</code></pre></div>\n`;
     },
     link({ href, title, tokens }) {
       const address = rewriteLink(href, page.id, base, pageIds);
@@ -169,6 +191,7 @@ for (const page of pages.filter(page => page.id !== 'index')) {
 for (const kind of ['rehberler', 'laboratuvarlar']) await save(`${kind}/index.html`, listing(kind));
 const searchPages = [...guides, ...labs, ...pages.filter(page => page.kind === 'sayfa' && page.id !== 'index')];
 await save('search-index.json', JSON.stringify(searchPages.map(page => ({ title: page.title, description: page.description, text: page.text, code: page.code, headings: page.headings, url: url(page.id), kind: page.kind, section: page.section })), null, 2));
+for (const file of codeFiles) await save(file.path, file.text);
 await save('search.json', JSON.stringify(searchPages.map(page => ({ title: page.title, description: page.description, text: page.text, url: url(page.id), type: 'execmap/', lang: 'en' })), null, 2));
 await save('lisanslar.html', documentHtml({ title: 'Licenses and source notices', description: 'Licenses and source notices for execmap, the shared console theme, and fonts.', current: 'lisanslar', body: `<main id="main" lang="en" class="legal-main" tabindex="-1"><h1>Licenses and source notices</h1><div class="prose"><p>Copyright (C) 2026 Suleyman Poyraz. Unless otherwise stated, project code, technical writing, and laboratory examples are distributed under <code>GPL-3.0-or-later</code> without warranty. <a href="${asset('LICENSE.txt')}">GNU GPL v3 text</a> and <a href="${asset('NOTICE.md')}">source notices</a>.</p><p>The shared console theme comes from Zaryob’s <a href="https://github.com/Zaryob/console-theme">console-theme</a> project. Its CSS and JavaScript files retain their <code>GPL-2.0-or-later</code> notices. <a href="${asset('assets/console/COPYING')}">GNU GPL v2 text</a>.</p><p>IBM Plex Mono and IBM Plex Sans fonts are served locally. <a href="${asset('assets/console/fonts/OFL.txt')}">SIL Open Font License</a>.</p><p>Font Awesome SVG icons retain their attribution and are subject to CC BY 4.0. <a href="${asset('assets/console/ICONS-LICENSE.txt')}">Icon license notice</a>.</p><p>Citations credit the authors of standards, documentation, and research. External text, code, and artwork retain their own licenses.</p><p>Build tools: <a href="https://github.com/markedjs/marked">Marked</a> and <a href="https://github.com/highlightjs/highlight.js">highlight.js</a>. These libraries run at build time and are not bundled for the browser.</p><p><a href="${url('kaynak-kutuphanesi')}">Back to the resource library →</a></p></div></main>` }));
 await save('404.html', documentHtml({ title: 'Page not found', description: 'Find the page you need in the guide directory.', current: '404', indexable: false, body: `<main id="main" lang="en" class="legal-main" tabindex="-1"><p class="eyebrow">execmap: No such file or directory</p><h1>404 / This page does not exist.</h1><p>The link may have changed. Continue from the guide directory or search the site.</p><p><a href="${url('rehberler/index')}">Back to the guide directory →</a></p></main>` }));

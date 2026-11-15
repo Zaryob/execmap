@@ -33,7 +33,7 @@ getconf GNU_LIBC_VERSION
 
 Save the following source in this directory as `ilk-inceleme.c`:
 
-```c
+```c ilk-inceleme.c
 #include <stdio.h>
 
 int hesapla(int *hedef, int artis) {

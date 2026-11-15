@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { parseHTML } from 'linkedom';
-import { initCatalog, initSearch } from '../public/app.js';
+import { initCatalog, initSearch, initCodeBlocks } from '../public/app.js';
 
 const home = await readFile('_site/index.html', 'utf8');
 const { document: homeDocument } = parseHTML(home);
@@ -84,4 +84,24 @@ test('untrusted index text stays text; external result URLs are excluded', async
   assert.equal(document.querySelectorAll('#search-results a').length, 1);
   assert.equal(document.querySelectorAll('#search-results img').length, 0);
   assert.match(document.getElementById('search-results').textContent, /<img/);
+});
+
+test('long code blocks fold, expand and stay open for a search highlight inside them', async () => {
+  const lab = await readFile('_site/laboratuvarlar/cpu-profili.html', 'utf8');
+  const { document } = parseHTML(lab);
+  initCodeBlocks(document, '');
+  const block = document.querySelector('.code-block[data-code-fold]');
+  const button = block.querySelector('.code-fold-toggle');
+  assert.ok(block.classList.contains('is-folded'));
+  assert.equal(button.getAttribute('aria-expanded'), 'false');
+  assert.equal(button.getAttribute('aria-controls'), block.querySelector('pre').id);
+  assert.match(button.textContent, /Show all \d+ lines/);
+  button.click();
+  assert.ok(!block.classList.contains('is-folded'));
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  initCodeBlocks(document, '');
+  assert.equal(block.querySelectorAll('.code-fold-toggle').length, 1, 'initialisation is idempotent');
+  const highlighted = parseHTML(lab).document;
+  initCodeBlocks(highlighted, '?highlight=find_linear');
+  assert.ok(!highlighted.querySelector('.code-block[data-code-fold]').classList.contains('is-folded'));
 });

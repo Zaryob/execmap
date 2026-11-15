@@ -33,7 +33,7 @@ def source(page):
     path = ROOT / 'content' / (page + '.md')
     raw = path.read_text()
     report['sources'][str(path.relative_to(ROOT))] = hashlib.sha256(raw.encode()).hexdigest()
-    blocks = re.findall(r'```c\n(.*?)\n```', raw, re.S)
+    blocks = re.findall(r'```c(?: [A-Za-z0-9_.-]+\.[A-Za-z0-9]+)?\n(.*?)\n```', raw, re.S)
     assert len(blocks) == 1, f'{page}: expected exactly one C block, found {len(blocks)}'
     return blocks[0] + '\n'
 
