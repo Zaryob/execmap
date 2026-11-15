@@ -95,7 +95,7 @@ test('runtime downloads match the tested sources and include no local outputs', 
         await readFile(path.resolve('examples', directory, file)), `${directory}/${file}`);
     }
   }
-  assert.ok(document.querySelector('a[href$="/thread-sayaclari.html"]').textContent.includes('Python / Linux'));
+  assert.ok(document.querySelector('a[href$="/thread-sayaclari.html"]').textContent.includes('Bash / Linux'));
 });
 
 test('all 30 reading pages are searchable, including code and cited resources', () => {

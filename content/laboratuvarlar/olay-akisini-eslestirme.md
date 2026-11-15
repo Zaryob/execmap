@@ -5,156 +5,391 @@ language: C++
 
 # Correlating six event boundaries across direct and queued calls
 
-Follow one event through a caller and a worker. Add a delay in two different places and use the recorded markers to find **where the extra time first appears**.
+Find a delay by following one event through **six source-code markers**. Read the recording code, compile it, select one sequence in its raw CSV, and subtract the timestamps yourself. Then repeat with a queue and show which thread produced each marker.
 
-This lab has two versions of the same flow. In `direct` mode, one thread performs everything. In `queued` mode, one thread receives events and another takes them from a queue. The classes are simply `Dispatcher`, `Worker`, and `TraceBuffer`; no external service or application framework is needed.
+The exercise does not require an analysis script. The final optional checker can verify the work after you understand the rows and formulas.
 
 ## Before you start
 
-Use Linux, a C++11 compiler, and Python 3.7 or newer. GDB is optional. Complete [timing and waiting](zamanlama-ve-bekleme.md) first if elapsed duration and entry interval are unfamiliar.
+Use 64-bit Linux, Bash, a C++11 compiler, and `awk`. Complete [manual timing](zamanlama-ve-bekleme.md) first for Bash `read`, integer subtraction, and elapsed/CPU clock distinctions. This file contains elapsed timestamps only.
 
-A **sequence ID** is a number attached to one event. It lets us recognize that event at several points, even after another thread handles it. A **queue** lets the receiving thread hand work to a consumer thread.
-
-## 1. Get the two files and build
-
-Choose one workspace. If you have the repository, start at its root and run:
+From an execmap repository root:
 
 ```bash
 cd examples/event-pipeline
 ```
 
-Website-only readers can instead create an empty directory:
+Website readers can create a separate directory and save [event_pipeline.cpp](../labs/event-pipeline/event_pipeline.cpp) there:
 
 ```bash
-mkdir -p ~/execmap-labs/event-pipeline
-cd ~/execmap-labs/event-pipeline
+mkdir -p ~/execmap-labs/manual-pipeline
+cd ~/execmap-labs/manual-pipeline
 ```
 
-Download [event_pipeline.cpp](../labs/event-pipeline/event_pipeline.cpp) and this lab's [analyze.py](../labs/event-pipeline/analyze.py) into it. Keep this directory separate from the timing lab: the two analyzers have the same filename but expect different records.
+Keep the same Bash session open throughout the calculations.
 
-In your chosen directory:
+## 1. Read how each marker is created
+
+Display the complete file:
 
 ```bash
-ls event_pipeline.cpp analyze.py
+cat event_pipeline.cpp
+```
+
+The recording class is:
+
+```cpp
+class TraceBuffer {
+    long tid_;
+public:
+    std::vector<Record> records;
+    explicit TraceBuffer(unsigned count) : tid_(syscall(SYS_gettid)) {
+        if (tid_ < 1) throw std::runtime_error("cannot read thread identity");
+        records.reserve(static_cast<std::size_t>(count) * 6);
+    }
+    void mark(unsigned seq, const char* event) {
+        const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now().time_since_epoch()).count();
+        records.push_back(Record{ns, seq, tid_, event});
+    }
+};
+```
+
+A `TraceBuffer` belongs to the thread that constructs it. The constructor gets that thread's Linux TID and reserves storage. `mark` reads the steady clock and stores timestamp, sequence, TID, and event name together. It does not print a line while the worker is running.
+
+The worker's body is small enough to inspect completely:
+
+```cpp
+class Worker {
+    TraceBuffer& trace_;
+public:
+    unsigned completed = 0;
+    explicit Worker(TraceBuffer& trace) : trace_(trace) {}
+    __attribute__((noinline)) void process(unsigned seq) {
+        trace_.mark(seq, "WORK_ENTER");
+        ++completed;
+        trace_.mark(seq, "WORK_EXIT");
+    }
+};
+```
+
+`WORK_ENTER` is recorded before incrementing the object's counter; `WORK_EXIT` is recorded afterward. That difference measures this body plus the measurement costs around it. It does not measure how long the event waited before entry.
+
+The caller places three more markers:
+
+```cpp
+class Dispatcher {
+    TraceBuffer& trace_;
+    Worker& worker_;
+    bool delay_;
+public:
+    Dispatcher(TraceBuffer& trace, Worker& worker, bool delay)
+        : trace_(trace), worker_(worker), delay_(delay) {}
+    __attribute__((noinline)) void dispatch(unsigned seq) {
+        trace_.mark(seq, "DISPATCH_ENTER");
+        trace_.mark(seq, "BEFORE_CALL");
+        if (delay_ && seq == 3) std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        worker_.process(seq);
+        trace_.mark(seq, "AFTER_CALL");
+    }
+};
+```
+
+`DISPATCH_ENTER` marks handler entry. `BEFORE_CALL` is immediately before the controlled delay and worker call. `AFTER_CALL` is reached after the worker returns. Notice the `if`: only sequence 3 waits, and only when `delay_` is true. The `dispatch-wait` scenario sets that flag; baseline does not.
+
+The source places `RECEIVED` before handing off the sequence. In direct mode it then calls the dispatcher on the same thread. Together these operations produce six markers for each sequence.
+
+## 2. Build and record three direct calls
+
+Create the output directories:
+
+```bash
 mkdir -p build results
+```
+
+Compile:
+
+```bash
 g++ -std=c++11 -g3 -O0 -fno-omit-frame-pointer -Wall -Wextra -Wpedantic -pthread event_pipeline.cpp -o build/event_pipeline
-sha256sum event_pipeline.cpp analyze.py build/event_pipeline > results/inputs.sha256
 ```
 
-The last command records file identities for repeatability. It writes to a file, so no terminal output from that command is expected.
+As in lab 7, `-std` selects C++11, `-g3` adds debug information, `-O0` keeps inspection straightforward, the warning flags request diagnostics, `-pthread` provides thread support, and `-o` names the output. The complete source includes argument checking and CSV writing around the excerpts shown here.
 
-## 2. Follow the direct call first
+Run the direct baseline:
 
 ```bash
-./build/event_pipeline direct baseline 8 direct-baseline results/direct.csv
-python3 analyze.py results/direct.csv --mode direct --expected-count 8
+./build/event_pipeline direct baseline 3 direct-first results/direct.csv
 ```
 
-The first command means: use **direct** calls, add **no artificial delay**, process **8** events, label the run **direct-baseline**, and save its CSV. A run label distinguishes captures that reuse sequence numbers.
+The arguments choose **direct** calls, **baseline** behavior, **3** events, the run label **direct-first**, and an output file. The run label identifies this capture; sequence numbers restart at 1 in every new run.
 
-The analyzer should begin with:
+Inspect the format and count:
+
+```bash
+head -n 1 results/direct.csv
+wc -l results/direct.csv
+```
+
+The header is `run_id,timestamp_ns,seq,tid,event`. Expect **19 lines**: one header plus six markers for each of three events.
+
+Important difference from lab 7: the elapsed timestamp is now **column 2** because column 1 holds the run ID. Inspect the header instead of reusing a column number blindly.
+
+## 3. Isolate one event and inspect its identity
+
+```bash
+awk -F, '$1 == "direct-first" && $3 == 1' results/direct.csv
+```
+
+`-F,` splits at commas. `$1` selects the run label and `$3` selects sequence 1. Both conditions are required, so markers from another event or run cannot be substituted into the calculation.
+
+You should see these names, in order:
 
 ```text
-PASS: run=direct-baseline count=8 mode=direct
+RECEIVED
+DISPATCH_ENTER
+BEFORE_CALL
+WORK_ENTER
+WORK_EXIT
+AFTER_CALL
 ```
 
-It then prints one summary line for each sequence number. Each event has six markers:
+Check column 4: all six TIDs must match in this direct recording. We have not crossed a queue yet.
 
-```text
-RECEIVED → DISPATCH_ENTER → BEFORE_CALL → WORK_ENTER → WORK_EXIT → AFTER_CALL
-```
-
-Read the names as a small story: an event arrives, the dispatcher starts handling it, the dispatcher is about to call the worker, the worker enters and exits, and the dispatcher resumes after the call. Eight events produce **48 records**.
-
-In this mode, every marker for an event has the same TID. That is the operating-system thread ID. You can open `results/direct.csv` in a text editor to see it directly.
-
-## 3. Move receipt and processing onto different threads
+Extract the six elapsed timestamps into individual files:
 
 ```bash
-./build/event_pipeline queued baseline 8 queued-baseline results/queued.csv
-python3 analyze.py results/queued.csv --mode queued --expected-count 8
+awk -F, '$1 == "direct-first" && $3 == 1 && $5 == "RECEIVED" { print $2 }' results/direct.csv > results/received.ns
+awk -F, '$1 == "direct-first" && $3 == 1 && $5 == "DISPATCH_ENTER" { print $2 }' results/direct.csv > results/dispatch.ns
+awk -F, '$1 == "direct-first" && $3 == 1 && $5 == "BEFORE_CALL" { print $2 }' results/direct.csv > results/before.ns
+awk -F, '$1 == "direct-first" && $3 == 1 && $5 == "WORK_ENTER" { print $2 }' results/direct.csv > results/work-enter.ns
+awk -F, '$1 == "direct-first" && $3 == 1 && $5 == "WORK_EXIT" { print $2 }' results/direct.csv > results/work-exit.ns
+awk -F, '$1 == "direct-first" && $3 == 1 && $5 == "AFTER_CALL" { print $2 }' results/direct.csv > results/after.ns
 ```
 
-Here the source thread records `RECEIVED` and puts the event into a queue. The consumer thread records the remaining five markers. They have different TIDs, but keep the **same run label and sequence number** for the same event.
+Every command performs the same visible operation: choose run, sequence, and event; print timestamp column 2; redirect that one value into a file. Each file must contain exactly one integer. Recheck the six selected rows if any value is missing.
 
-The consumer's dispatcher still calls its worker synchronously: it waits for that function to return. The thread handoff happened earlier, at the queue. This is why a queued application can contain ordinary synchronous calls too.
-
-**Your checkpoint:** locate one sequence in the CSV and explain the TID change. If you grouped records only by TID, you would split this one event into two incomplete pieces.
-
-## 4. Add a gap before an event arrives
+Load those values into variables:
 
 ```bash
-./build/event_pipeline direct source-gap 8 source-gap-run results/source-gap.csv
-python3 analyze.py results/source-gap.csv --mode direct --expected-count 8
+read -r LAB_RECEIVED_NS < results/received.ns
+read -r LAB_DISPATCH_NS < results/dispatch.ns
+read -r LAB_BEFORE_NS < results/before.ns
+read -r LAB_WORK_ENTER_NS < results/work-enter.ns
+read -r LAB_WORK_EXIT_NS < results/work-exit.ns
+read -r LAB_AFTER_NS < results/after.ns
 ```
 
-The source normally waits 10 ms between iterations. Before **sequence 3**, this scenario adds another 30 ms sleep.
+Here there is only one value per line, so `read` does not need a comma separator. `<` supplies the file to the command. `-r` keeps the input literal.
 
-Find sequence 3 in the report. Its `source_interval_ms` should show the longer interval between receipts. The worker's entry interval can grow too, because that event reached the whole flow later. Its own call can still be short.
-
-This is a controlled test: you know where the wait was inserted. On a real application, a large receipt interval would narrow the investigation to before that marker, but would not identify the ultimate hardware or external-source cause by itself.
-
-## 5. Add a wait inside the caller
+## 4. Calculate the five adjacent stages
 
 ```bash
-./build/event_pipeline direct dispatch-wait 8 dispatch-wait-run results/dispatch-wait.csv
-python3 analyze.py results/dispatch-wait.csv --mode direct --expected-count 8
+LAB_HANDOFF_NS=$((LAB_DISPATCH_NS - LAB_RECEIVED_NS))
+LAB_PREPARE_NS=$((LAB_BEFORE_NS - LAB_DISPATCH_NS))
+LAB_TRANSITION_NS=$((LAB_WORK_ENTER_NS - LAB_BEFORE_NS))
+LAB_WORK_NS=$((LAB_WORK_EXIT_NS - LAB_WORK_ENTER_NS))
+LAB_RETURN_NS=$((LAB_AFTER_NS - LAB_WORK_EXIT_NS))
 ```
 
-For sequence 3, the dispatcher now waits 30 ms **after `BEFORE_CALL` but before worker entry**. Look at `call_transition_ms` for that sequence. It should contain the added wait, while `work_elapsed_ms` can stay small.
+Read each subtraction back against the source:
 
-Now repeat with the queue:
+1. Receipt → dispatcher entry: time before handling begins.
+2. Dispatcher entry → before-call: caller preparation.
+3. Before-call → worker entry: transition to the worker, including any wait inserted before that call.
+4. Worker entry → worker exit: elapsed worker body.
+5. Worker exit → after-call: time until the caller's next marker.
+
+Print the numbers you calculated:
 
 ```bash
-./build/event_pipeline queued dispatch-wait 8 queued-wait-run results/queued-wait.csv
-python3 analyze.py results/queued-wait.csv --mode queued --expected-count 8
+printf 'receipt to dispatcher: %s ns\n' "$LAB_HANDOFF_NS"
+printf 'dispatcher preparation: %s ns\n' "$LAB_PREPARE_NS"
+printf 'before-call to worker: %s ns\n' "$LAB_TRANSITION_NS"
+printf 'worker body: %s ns\n' "$LAB_WORK_NS"
+printf 'worker return to caller: %s ns\n' "$LAB_RETURN_NS"
 ```
 
-While the consumer waits, the producer can receive later events. Those events may spend longer between receipt and dispatcher entry, visible as `receive_to_dispatch_ms`.
-
-**Your checkpoint:** distinguish “the worker itself took longer” from “work waited before the worker started.” A large caller-to-worker interval alone does not prove scheduler delay; in this experiment the caller deliberately sleeps there.
-
-## 6. Read only the fields needed for your question
-
-Start with four report fields:
-
-- `source_interval_ms`: how long since the previous event was received?
-- `receive_to_dispatch_ms`: how long from receipt until handling began?
-- `call_transition_ms`: how long from before-call until worker entry?
-- `work_elapsed_ms`: how long between worker entry and exit?
-
-The remaining fields fill in the smaller boundaries: `dispatch_prepare_ms` is dispatcher entry to before-call, `return_transition_ms` is worker exit to after-call, and `caller_elapsed_ms` covers before-call to after-call. `work_entry_interval_ms` compares the starts of successive worker calls.
-
-A direct call blocks the source loop until it returns, so a caller-side wait can also delay a *later* receipt. Compare the sequence number and event order rather than assigning a root cause from one large interval.
-
-## If the report is rejected
-
-**Unexpected header:** confirm you are using the event-pipeline analyzer, not the timing lab's analyzer.
-
-**Missing or mixed events:** wait for the program to finish and analyze one complete file. Keep a separate run label and output file per experiment; do not concatenate captures.
-
-**Thread relationship does not match mode:** pass `--mode direct` for a direct recording and `--mode queued` for a queued one. The analyzer checks that relationship instead of guessing it.
-
-**Timings differ from a nominal 10 or 30 ms:** other load can delay any step. Look for the controlled change and its location rather than exact millisecond equality.
-
-## Further details and verification
-
-Each thread has its own `TraceBuffer`. Buffers and queue storage are allocated before recording, merged after the consumer joins, and written afterward. Clock reads, locks, wakeups, and buffering still affect timing. This is a single-producer, single-consumer, FIFO example without recursion.
-
-The analyzer checks all six ordered events, contiguous sequence numbers, one run ID, monotonic clocks, and the selected TID relationship. All elapsed timestamps use the same process's steady clock. CPU counters belonging to different threads could not be subtracted in the same way. The receipt-to-dispatch interval includes application queueing and scheduling opportunities; it is not a pure runqueue-delay measurement.
-
-From the **repository root** on Linux:
+The caller's whole measured call is a different subtraction:
 
 ```bash
-python3 scripts/verify-debugging-labs.py --require-linux --gdb
+LAB_CALL_NS=$((LAB_AFTER_NS - LAB_BEFORE_NS))
+printf 'whole caller interval: %s ns\n' "$LAB_CALL_NS"
+printf 'sum of its three stages: %s ns\n' "$((LAB_TRANSITION_NS + LAB_WORK_NS + LAB_RETURN_NS))"
 ```
 
-This checks all six mode/scenario combinations, invalid traces, known synthetic intervals, and the published C++ GDB session. Reports go to `output/debugging-validation/`. See the [validation record](../labs/event-pipeline/validation.txt) for actual tool coverage; perf/BPF and remote debugging have separate evidence.
+Those last two integers should agree: they use the same bookends. This arithmetic check helps catch a mistaken pairing. Keep integer nanoseconds for the calculation; divide the final difference by one million only when displaying milliseconds.
 
-Keep one sequence's six markers and explain which boundary changed in each scenario. Continue with [C++ call-chain debugging](../rehberler/cpp-cagri-zinciri.md) to inspect the objects, or [thread counters](thread-sayaclari.md) to observe a task without tracing.
+## 5. Put a known wait before worker entry
+
+Record a new run:
+
+```bash
+./build/event_pipeline direct dispatch-wait 3 direct-wait results/direct-wait.csv
+awk -F, '$1 == "direct-wait" && $3 == 3' results/direct-wait.csv
+```
+
+The second command selects **sequence 3**, because that is the branch that sleeps in the dispatcher source. Do not compare sequence 1's before-call with sequence 3's entry.
+
+Calculate the affected stage and the worker body from that sequence:
+
+```bash
+awk -F, '$1 == "direct-wait" && $3 == 3 && $5 == "BEFORE_CALL" { print $2 }' results/direct-wait.csv > results/wait-before.ns
+awk -F, '$1 == "direct-wait" && $3 == 3 && $5 == "WORK_ENTER" { print $2 }' results/direct-wait.csv > results/wait-enter.ns
+awk -F, '$1 == "direct-wait" && $3 == 3 && $5 == "WORK_EXIT" { print $2 }' results/direct-wait.csv > results/wait-exit.ns
+read -r LAB_WAIT_BEFORE_NS < results/wait-before.ns
+read -r LAB_WAIT_ENTER_NS < results/wait-enter.ns
+read -r LAB_WAIT_EXIT_NS < results/wait-exit.ns
+printf 'caller-to-worker transition: %s ns\n' "$((LAB_WAIT_ENTER_NS - LAB_WAIT_BEFORE_NS))"
+printf 'worker body: %s ns\n' "$((LAB_WAIT_EXIT_NS - LAB_WAIT_ENTER_NS))"
+```
+
+The first difference should contain the deliberate 30 ms wait; the second can stay short. You have located the extra time by source placement and matching rows, rather than by a summary label. It would be incorrect to say the worker body itself took the entire transition interval.
+
+## 6. Put a wait before receipt instead
+
+The source loop contains this separate condition:
+
+```cpp
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (scenario == "source-gap" && seq == 3)
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            source.mark(seq, "RECEIVED");
+```
+
+`source-gap` adds its wait before `RECEIVED` for sequence 3. The normal loop already sleeps 10 ms between iterations.
+
+```bash
+./build/event_pipeline direct source-gap 3 source-wait results/source-gap.csv
+awk -F, '$1 == "source-wait" && $5 == "RECEIVED" { print $3, $4, $2 }' results/source-gap.csv
+```
+
+The printed fields are sequence, TID, and elapsed timestamp. Select receipt timestamps for sequences 2 and 3 and subtract them:
+
+```bash
+awk -F, '$1 == "source-wait" && $3 == 2 && $5 == "RECEIVED" { print $2 }' results/source-gap.csv > results/source-second.ns
+awk -F, '$1 == "source-wait" && $3 == 3 && $5 == "RECEIVED" { print $2 }' results/source-gap.csv > results/source-third.ns
+read -r LAB_SOURCE_SECOND_NS < results/source-second.ns
+read -r LAB_SOURCE_THIRD_NS < results/source-third.ns
+printf 'receipt 2 to receipt 3: %s ns\n' "$((LAB_SOURCE_THIRD_NS - LAB_SOURCE_SECOND_NS))"
+```
+
+This is an **entry interval between two events**, not a duration inside event 3. The added wait should be visible here; do not require exact equality to 40 ms under arbitrary system load.
+
+## 7. Inspect the actual queue handoff
+
+In queued mode, the source uses this branch to publish a sequence:
+
+```cpp
+                {
+                    std::lock_guard<std::mutex> lock(mutex);
+                    queue[available++] = seq;
+                }
+                ready.notify_one();
+```
+
+The lock protects the shared queue and count. `notify_one` notifies the waiting consumer; it does not mean that the consumer has already run or finished handling the event.
+
+The consumer reads with:
+
+```cpp
+        if (mode == "queued") {
+            consumer = std::thread([&] {
+                try {
+                    TraceBuffer trace(count);
+                    Worker worker(trace);
+                    Dispatcher dispatcher(trace, worker, scenario == "dispatch-wait");
+                    unsigned read = 0;
+                    for (;;) {
+                        std::unique_lock<std::mutex> lock(mutex);
+                        ready.wait(lock, [&] { return read < available || done; });
+                        if (read == available && done) break;
+                        const unsigned seq = queue[read++];
+                        lock.unlock();
+                        dispatcher.dispatch(seq);
+                    }
+                    consumer_records = std::move(trace.records);
+                } catch (...) { consumer_error = std::current_exception(); }
+            });
+        }
+```
+
+`std::thread` starts the consumer function. Its `[&]` capture lets it refer to the shared queue and synchronization objects in `main`. The `TraceBuffer`, `Worker`, and `Dispatcher` are constructed inside that consumer, so its markers use the consumer TID and its own buffer. The producer has a separate source buffer.
+
+`ready.wait` releases the mutex while waiting and reacquires it before returning. The predicate checks whether there is work or shutdown. After copying a sequence out of the queue, `unlock` releases the mutex **before** calling the dispatcher. The producer can therefore enqueue later events while that dispatcher works or sleeps.
+
+When the producer finishes its loop, `main` shuts the consumer down and collects its records:
+
+```cpp
+        if (consumer.joinable()) {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                done = true;
+            }
+            ready.notify_one();
+            consumer.join();
+            if (consumer_error) std::rethrow_exception(consumer_error);
+        }
+        source.records.insert(source.records.end(), consumer_records.begin(), consumer_records.end());
+        std::stable_sort(source.records.begin(), source.records.end(),
+                         [](const Record& a, const Record& b) { return a.ns < b.ns; });
+```
+
+`done` is changed while holding the same mutex. The notification lets the consumer notice shutdown; it still drains already published work before its loop exits. `join` waits for the thread to finish, making its completed buffer available to `main`. Only then are the records merged and sorted. A stored consumer exception is rethrown instead of silently reporting a completed capture.
+
+Record a queued baseline and show sequence 1:
+
+```bash
+./build/event_pipeline queued baseline 3 queued-first results/queued.csv
+awk -F, '$1 == "queued-first" && $3 == 1 { print $3, $4, $5, $2 }' results/queued.csv
+```
+
+The output is sequence, TID, event, timestamp. `RECEIVED` belongs to the producer; the other five markers belong to the consumer. The common sequence connects them. Filtering everything by the producer's TID would lose the consumer's markers.
+
+## 8. Measure a queued event's wait yourself
+
+Let the consumer wait inside sequence 3 while the producer continues receiving later sequences:
+
+```bash
+./build/event_pipeline queued dispatch-wait 6 queued-wait results/queued-wait.csv
+awk -F, '$1 == "queued-wait" && $3 == 4' results/queued-wait.csv
+```
+
+Now measure receipt → dispatcher entry for **sequence 4**, using its two timestamps even though their TIDs differ:
+
+```bash
+awk -F, '$1 == "queued-wait" && $3 == 4 && $5 == "RECEIVED" { print $2 }' results/queued-wait.csv > results/queued-received.ns
+awk -F, '$1 == "queued-wait" && $3 == 4 && $5 == "DISPATCH_ENTER" { print $2 }' results/queued-wait.csv > results/queued-dispatch.ns
+read -r LAB_QUEUED_RECEIVED_NS < results/queued-received.ns
+read -r LAB_QUEUED_DISPATCH_NS < results/queued-dispatch.ns
+printf 'sequence 4 receipt to handler: %s ns\n' "$((LAB_QUEUED_DISPATCH_NS - LAB_QUEUED_RECEIVED_NS))"
+```
+
+This interval can grow because the consumer is occupied with an earlier event. Actual load can change whether and how much backlog accumulates. The interval includes application queueing and scheduling opportunities; it is not a pure runnable-wait measurement. A direct call also blocks the source loop, so a caller delay can shift a later receipt there too.
+
+All timestamps here use the same process's steady clock, making this elapsed subtraction across threads meaningful. Thread CPU counters from different threads could not be compared in the same way. Buffers are merged after `join`, then sorted by elapsed timestamp for CSV output; file position alone is not an invocation identity.
+
+## What to demonstrate before using a checker
+
+Show one direct sequence's five adjacent differences and its matching caller total. Show the changed stage for `dispatch-wait`, the receipt interval for `source-gap`, and the producer/consumer TIDs for a queued event. Explain each result by pointing to the exact marker placement in the source.
+
+If any extracted file is empty, contains several rows, or has a different run/sequence identity, stop before subtraction. The source and parser are deliberately limited to one producer, one FIFO consumer, and no recursion; they are not a general distributed tracing implementation.
+
+## Optional: check the complete file and inspect objects
+
+After the manual work, you can download this lab's [analyze.py](../labs/event-pipeline/analyze.py) and compare its results:
+
+```bash
+python3 analyze.py results/direct.csv --mode direct --expected-count 3
+```
+
+It checks completeness, ordering, run/sequence identity, and the chosen thread relationship. The program's `[run_id, sequence]` pairing differs from lab 7's same-thread timing file, so the analyzers are not interchangeable.
+
+The [C++ GDB guide](../rehberler/cpp-cagri-zinciri.md) lets you stop in these generic objects and inspect the member counter. From the repository root, `python3 scripts/verify-debugging-labs.py --require-linux --gdb` runs regression checks. Its [validation record](../labs/event-pipeline/validation.txt) describes tool coverage; it is not a substitute for the raw-row exercise.
 
 ## Sources
 
 - [C++ steady_clock](https://eel.is/c++draft/time.clock.steady) defines the clock contract.
 - [Linux gettid](https://man7.org/linux/man-pages/man2/gettid.2.html) defines OS thread identity.
 - [GDB C++ expressions](https://sourceware.org/gdb/current/onlinedocs/gdb.html/C-Plus-Plus-Expressions.html) supports the follow-up member inspection.
+
+- [GNU Bash manual: arithmetic expansion](https://www.gnu.org/software/bash/manual/html_node/Arithmetic-Expansion.html) and [Bash builtins](https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html) document the shell calculations and `read`.

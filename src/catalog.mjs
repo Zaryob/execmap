@@ -27,11 +27,11 @@ export const summaries = {
   'debug-bilgisi': 'Move debugging information to a separate file and help GDB find the source again.',
   'derleme-farklari': 'Compile one calculation three ways: keep the answer and compare the instructions.',
   'calisma-zamani-gecikmesi': 'Distinguish call intervals, elapsed duration, CPU service, off-CPU time, and runnable delay.',
-  'zamanlama-ve-bekleme': 'Compare waiting with busy work and separate call duration, CPU time, and the gap between calls.',
+  'zamanlama-ve-bekleme': 'Read the C++ measurement points and calculate elapsed, CPU, and entry-to-entry time from raw CSV rows.',
   'process-thread-ve-zamanlayici': 'Identify tasks and interpret cumulative scheduler counters, affinity, policy, frequency, and pressure.',
   'cpp-cagri-zinciri': 'Inspect C++ member calls, object state, thread boundaries, and architecture-dependent registers with GDB.',
-  'olay-akisini-eslestirme': 'Follow one event across six markers and find where a deliberately added delay appears.',
-  'thread-sayaclari': 'Take two snapshots of a thread and distinguish measured activity from unavailable waiting data.',
+  'olay-akisini-eslestirme': 'Inspect direct calls and queue handoffs, then calculate each stage from six matching event markers.',
+  'thread-sayaclari': 'Read procfs files directly, check task identity, and subtract thread counters yourself in Bash.',
 };
 export const routes = [
   { n: '01', title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.', pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/linker-duzeni', 'rehberler/baslangic-ve-auxv', 'rehberler/dinamik-baglama'], code: 'readelf -lW ./ornek' },
