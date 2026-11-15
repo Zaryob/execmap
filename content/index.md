@@ -18,6 +18,7 @@ An ELF (Executable and Linkable Format) file is a static plan for a program's li
 - **What remains after names and symbols are removed?** [Stripped ELF](rehberler/stripped-elf.md), [binary diffing](rehberler/ikili-fark-analizi.md).
 - **How do I prepare to read assembly?** [Registers, addressing, and calling conventions](rehberler/assembly-okuma.md), [a first GDB investigation](laboratuvarlar/gdb-ilk-inceleme.md), [branches and pointers](laboratuvarlar/dallanma-ve-pointer.md).
 - **Is code being created or concealed in memory?** [Custom loaders and in-memory execution](rehberler/ozel-yukleyiciler.md), [packed and encrypted ELF](rehberler/paketli-elf.md), [core dumps and snapshots](rehberler/core-ve-snapshot.md).
+- **I have never profiled a program. Where do I start?** [Runtime performance analysis from zero](rehberler/performans-analizine-giris.md), then [bpftrace from zero](rehberler/bpftrace-temelleri.md) and the [debugging playbook](rehberler/debug-is-akisi.md) for slow, stuck, or failing programs.
 - **What can I measure at runtime, and how?** [perf and Intel PT](rehberler/perf-ile-yurutme.md), [eBPF events](rehberler/ebpf-ile-olaylar.md), [observer effects and anti-debugging](rehberler/analiz-aracinin-etkisi.md), [interpreting traces](rehberler/izleri-yorumlamak.md).
 
 ---
@@ -32,6 +33,9 @@ Learn with small experiments you can compile and run in your own terminal:
 - **[Symbol selection](laboratuvarlar/sembol-secimi.md)**: Interpose on a call with `LD_PRELOAD` without modifying the executable.
 - **[Debug information](laboratuvarlar/debug-bilgisi.md)**: Separate DWARF data, strip the working binary, and reconnect it to GDB with `.gnu_debuglink`.
 - **[Compiler differences](laboratuvarlar/derleme-farklari.md)**: Examine inlining, stack layout, and loop transformations under `-O0`, `-O2`, and `-Os`.
+- **[CPU profiling and flame graphs](laboratuvarlar/cpu-profili.md)**: Find a quadratic hotspot with `perf stat`, `perf record`, and a flame graph, then prove the fix.
+- **[First steps with bpftrace](laboratuvarlar/bpftrace-ilk-adimlar.md)**: Count, filter, histogram, and time events in a program whose every count you can predict.
+- **[Diagnosing an off-CPU slowdown](laboratuvarlar/yavas-program-teshisi.md)**: Find a lock held across a slow step when the CPU is idle and a CPU profile shows nothing useful.
 - **[Timing and waiting](laboratuvarlar/zamanlama-ve-bekleme.md)**: Compare elapsed and thread CPU time in a C++ workload, validate correlated calls, and investigate period overruns.
 - **[Event correlation](laboratuvarlar/olay-akisini-eslestirme.md)**: Follow six boundaries through direct and queued calls; localize a controlled source or caller wait.
 - **[Thread counters](laboratuvarlar/thread-sayaclari.md)**: Read procfs counter deltas with task identity and accounting checks.
@@ -42,6 +46,6 @@ Learn with small experiments you can compile and run in your own terminal:
 
 ## References and reading routes
 
-- **[Reading routes](okuma-rotalari.md)**: Three structured paths from loader architecture to advanced runtime observation.
+- **[Reading routes](okuma-rotalari.md)**: Three structured paths from loader architecture to runtime observation, including a beginner track for perf and bpftrace.
 - **[Resource library](kaynak-kutuphanesi.md)**: ABI specifications, Linux source, GNU documentation, and binary analysis literature.
 - **[Research method and primary sources](kaynaklar.md)**: The technical foundations in Linux, System V ABI, and DWARF.

@@ -81,7 +81,7 @@ test('reading pages and home do not overflow narrow viewports', async ({ page },
   test.skip(testInfo.project.name === 'mobile', 'The desktop run checks all viewport widths.');
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const route of ['./', 'laboratuvarlar/sembol-secimi.html', 'kaynak-kutuphanesi.html']) {
+    for (const route of ['./', 'laboratuvarlar/sembol-secimi.html', 'kaynak-kutuphanesi.html', 'rehberler/performans-analizine-giris.html', 'rehberler/bpftrace-temelleri.html', 'rehberler/debug-is-akisi.html', 'laboratuvarlar/cpu-profili.html', 'laboratuvarlar/yavas-program-teshisi.html']) {
       await page.goto(route);
       await page.evaluate(() => document.fonts.ready);
       const size = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));

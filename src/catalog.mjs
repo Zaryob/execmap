@@ -1,10 +1,16 @@
 export const sections = [
   { name: 'ELF and loading', key: 'elf', label: '01', pages: ['elf-dosyadan-bellege', 'elf-parser-ve-adresler', 'linker-duzeni', 'baslangic-ve-auxv', 'dinamik-baglama'] },
   { name: 'Reverse engineering', key: 're', label: '02', pages: ['assembly-okuma', 'cpp-cagri-zinciri', 'gdb-uzak-hedef', 'stripped-elf', 'ikili-fark-analizi', 'ozel-yukleyiciler', 'paketli-elf', 'core-ve-snapshot'] },
-  { name: 'Runtime', key: 'tracing', label: '03', pages: ['process-thread-ve-zamanlayici', 'perf-ile-yurutme', 'ebpf-ile-olaylar', 'calisma-zamani-gecikmesi', 'zamanlayici-izleri', 'izleme-donmalari', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
+  { name: 'Runtime', key: 'tracing', label: '03', pages: ['performans-analizine-giris', 'process-thread-ve-zamanlayici', 'perf-ile-yurutme', 'bpftrace-temelleri', 'ebpf-ile-olaylar', 'debug-is-akisi', 'calisma-zamani-gecikmesi', 'zamanlayici-izleri', 'izleme-donmalari', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
 ];
-export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari', 'zamanlama-ve-bekleme', 'olay-akisini-eslestirme', 'thread-sayaclari', 'fonksiyon-problari', 'zamanlayici-zaman-cizelgesi'];
+export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari', 'cpu-profili', 'bpftrace-ilk-adimlar', 'yavas-program-teshisi', 'zamanlama-ve-bekleme', 'olay-akisini-eslestirme', 'thread-sayaclari', 'fonksiyon-problari', 'zamanlayici-zaman-cizelgesi'];
 export const summaries = {
+  'performans-analizine-giris': 'Start here: vocabulary, method, tool choice, and machine setup for perf and bpftrace.',
+  'bpftrace-temelleri': 'Learn the bpftrace language step by step: probes, filters, built-ins, maps, histograms, timing, and stacks.',
+  'debug-is-akisi': 'A symptom-driven playbook for busy, waiting, stuck, failing, and regressed programs.',
+  'cpu-profili': 'Profile a C program with perf stat, perf record, and a flame graph; confirm the hotspot and prove the fix.',
+  'bpftrace-ilk-adimlar': 'Trace a deterministic C program and check every bpftrace count, histogram, and stack against the source.',
+  'yavas-program-teshisi': 'Find a lock held across a slow step when the CPU is idle: syscalls, uprobes, a timeline, and GDB.',
   'gdb-uzak-hedef': 'Connect remote GDB with matching artifacts, source mappings, and CLion or VS Code settings.',
   'zamanlayici-izleri': 'Reconstruct blocked and runnable intervals from scheduler events and check perf analyzer behavior.',
   'izleme-donmalari': 'Preserve recovery evidence and isolate the tracing mechanism involved in an unresponsive system.',
@@ -41,5 +47,5 @@ export const summaries = {
 export const routes = [
   { n: '01', title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.', pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/linker-duzeni', 'rehberler/baslangic-ve-auxv', 'rehberler/dinamik-baglama'], code: 'readelf -lW ./ornek' },
   { n: '02', title: 'From names to behavior', text: 'Understand stripped files and meaningful differences between versions.', pages: ['rehberler/cpp-cagri-zinciri', 'rehberler/stripped-elf', 'rehberler/ikili-fark-analizi', 'rehberler/ozel-yukleyiciler', 'rehberler/paketli-elf', 'rehberler/core-ve-snapshot'], code: 'objdump -d ./ornek' },
-  { n: '03', title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.', pages: ['rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/ebpf-ile-olaylar', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/zamanlayici-izleri', 'rehberler/izleme-donmalari', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
+  { n: '03', title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.', pages: ['rehberler/performans-analizine-giris', 'rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/bpftrace-temelleri', 'rehberler/ebpf-ile-olaylar', 'rehberler/debug-is-akisi', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/zamanlayici-izleri', 'rehberler/izleme-donmalari', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
 ];

@@ -8,13 +8,15 @@ A source-backed study of Linux ELF loading, binary analysis, and runtime observa
 
 ## Research scope
 
-execmap follows a program from its ELF file layout through linking and process startup to memory mappings and observed execution. Eighteen guides cover three connected areas:
+execmap follows a program from its ELF file layout through linking and process startup to memory mappings and observed execution. Twenty-four guides cover three connected areas:
 
 - **ELF and loading:** segments and sections, address translation, parser validation, linker layout, auxiliary vectors, relocations, and symbol resolution.
 - **Binary analysis:** stripped executables, version comparison, user-space loaders, packed code, core files, and process snapshots.
 - **Runtime observation:** perf sampling, Intel PT, eBPF events, observer effects, and interpreting incomplete traces.
 
-Nine laboratories examine GDB instruction stepping, branches and pointers, memory permissions, symbol interposition, separate debug information, compiler optimization, runtime timing, sequence correlation, and per-thread counters. Each includes source, commands, and expected observations. A new assembly preparation guide leads into the two GDB laboratories before stripped-binary analysis. Articles, navigation, search, and shared interface controls are English. Existing public URL paths and source identifiers are preserved.
+A beginner track teaches runtime performance analysis and debugging from zero: [performance analysis from zero](content/rehberler/performans-analizine-giris.md), [bpftrace from zero](content/rehberler/bpftrace-temelleri.md), and a [symptom-driven debugging playbook](content/rehberler/debug-is-akisi.md), each paired with a lab ([CPU profiling and flame graphs](content/laboratuvarlar/cpu-profili.md), [first steps with bpftrace](content/laboratuvarlar/bpftrace-ilk-adimlar.md), [diagnosing an off-CPU slowdown](content/laboratuvarlar/yavas-program-teshisi.md)) whose expected counts can be derived from the source.
+
+Fourteen laboratories examine GDB instruction stepping, branches and pointers, memory permissions, symbol interposition, separate debug information, compiler optimization, CPU profiling, first bpftrace programs, off-CPU diagnosis, runtime timing, sequence correlation, per-thread counters, function probes, and scheduler timelines. Each includes source, commands, and expected observations. A new assembly preparation guide leads into the two GDB laboratories before stripped-binary analysis. Articles, navigation, search, and shared interface controls are English. Existing public URL paths and source identifiers are preserved.
 
 ## Method and literature
 
@@ -74,6 +76,18 @@ python3 scripts/verify-examples.py
 It also runs the portable arithmetic examples and entropy counterexamples.
 Artifacts and JSON results go to `output/technical-validation/`. This checks
 parser memory access and selected examples, not Linux ELF loadability.
+
+The beginner perf/bpftrace labs have a portable check that extracts their C
+programs from the Markdown, compiles them with `-Werror`, and verifies the
+deterministic results and timing relationships the pages promise (dominant
+stage, quadratic scaling, the effect of each fix):
+
+```sh
+python3 scripts/verify-perf-labs.py
+```
+
+Results go to `output/perf-lab-validation/`. It does not run perf or bpftrace;
+tool output must still be checked on Linux.
 
 Optional API checks use isolated, pinned Python dependencies:
 

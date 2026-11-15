@@ -14,9 +14,9 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   initCatalog(document);
   const rows = [...document.querySelectorAll('[data-catalog-item]')];
   const visible = () => rows.filter(row => !row.hidden);
-  assert.equal(visible().length, 21);
+  assert.equal(visible().length, 24);
   document.querySelector('[data-filter="tracing"]').click();
-  assert.equal(visible().length, 8);
+  assert.equal(visible().length, 11);
   const input = document.getElementById('catalog-query');
   input.value = 'eBPF'; input.dispatchEvent(new window.Event('input'));
   assert.equal(visible().length, 1);
@@ -26,7 +26,7 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   assert.equal(document.getElementById('catalog-empty').hidden, false);
   document.querySelector('[data-reset-filters]').click();
   assert.equal(input.value, '');
-  assert.equal(visible().length, 21);
+  assert.equal(visible().length, 24);
   assert.equal(document.querySelector('[data-filter="all"]').getAttribute('aria-pressed'), 'true');
 });
 

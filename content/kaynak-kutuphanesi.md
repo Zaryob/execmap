@@ -58,6 +58,18 @@ This library brings together standards, implementation sources, and tool authors
 - **[bpftrace](https://bpftrace.org/docs)** — The tracing language and reference documentation for the version in use.
 - **[Brendan Gregg: BPF Performance Tools](https://www.brendangregg.com/bpf-performance-tools-book.html)** — A book and examples for investigating system performance with BPF tools.
 
+### Learning perf and bpftrace from zero
+
+These are the most useful entry points for a reader without prior performance experience, in the order the [beginner track](okuma-rotalari.md#beginner-track-perf-and-bpftrace-from-zero) uses them:
+
+- **[Brendan Gregg: The USE Method](https://www.brendangregg.com/usemethod.html)** — A checklist for resources: utilization, saturation, errors. [Performance analysis from zero](rehberler/performans-analizine-giris.md).
+- **[perf wiki tutorial](https://perfwiki.github.io/main/tutorial/)** — `perf stat`, `perf record`, and `perf report` explained by the perf community, with output fields.
+- **[Brendan Gregg: Linux perf examples](https://www.brendangregg.com/perf.html)** — A large set of one-liners grouped by question.
+- **[Brendan Gregg: CPU Flame Graphs](https://www.brendangregg.com/FlameGraphs/cpuflamegraphs.html)** and **[FlameGraph scripts](https://github.com/brendangregg/FlameGraph)** — How flame graphs are built and read. [CPU profiling lab](laboratuvarlar/cpu-profili.md).
+- **[bpftrace one-liner tutorial](https://github.com/bpftrace/bpftrace/blob/master/docs/tutorial_one_liners.md)** — Twelve short lessons that introduce the language one feature at a time. [bpftrace from zero](rehberler/bpftrace-temelleri.md).
+- **[bpftrace manual](https://github.com/bpftrace/bpftrace/blob/master/man/adoc/bpftrace.adoc)** — Probe types, built-ins, map functions, and options; check the version that matches `bpftrace --version`.
+- **[Brendan Gregg: Off-CPU Analysis](https://www.brendangregg.com/offcpuanalysis.html)** — Why sampling misses waiting time and how to measure it. [Debugging playbook](rehberler/debug-is-akisi.md), [off-CPU diagnosis lab](laboratuvarlar/yavas-program-teshisi.md).
+
 ## 7. Assembly and reverse engineering preparation
 
 - **[Intel SDM](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html)** — Volume 1 covers registers and data representation; volume 2 covers instruction semantics. The technical reference for `lea`/`mov`, signed/unsigned conditions, and access width in [assembly preparation](rehberler/assembly-okuma.md).

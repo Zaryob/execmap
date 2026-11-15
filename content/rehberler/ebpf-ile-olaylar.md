@@ -8,6 +8,8 @@ Traditional tools such as `gdb` and `strace` use `ptrace()` to stop processes an
 
 **eBPF** collects events through programs verified by the Linux kernel. It can observe syscall tracepoints or user functions without creating a ptrace relationship, but this does not guarantee invisibility or zero cost. Uprobes, tracepoints, and kprobes are distinct mechanisms. Linux v6.12 x86 uprobes can place a `0xcc` software breakpoint in the target address space ([opcode definition](https://github.com/torvalds/linux/blob/v6.12/arch/x86/include/asm/uprobes.h), [implementation](https://github.com/torvalds/linux/blob/v6.12/kernel/events/uprobes.c)).
 
+If you have not written a bpftrace program before, start with [bpftrace from zero](bpftrace-temelleri.md) and the [first bpftrace lab](../laboratuvarlar/bpftrace-ilk-adimlar.md). This page assumes that syntax and focuses on attachment mechanisms and their limits.
+
 ## 1. Tracepoints, kprobes, and uprobes
 
 eBPF can attach observation programs at different system layers:
@@ -96,7 +98,7 @@ sudo bpftool prog list
 
 ## Investigate further
 
-Read [observer effects](analiz-aracinin-etkisi.md) to understand how targets detect analysis tools. Continue with [interpreting traces](izleri-yorumlamak.md) to connect records to properly bounded hypotheses.
+Use the [debugging playbook](debug-is-akisi.md) to apply these probes to slow, stuck, or failing programs. Read [observer effects](analiz-aracinin-etkisi.md) to understand how targets detect analysis tools. Continue with [interpreting traces](izleri-yorumlamak.md) to connect records to properly bounded hypotheses.
 
 For correlated entry/return and off-CPU experiments on one downloadable workload, use the [runtime latency guide](calisma-zamani-gecikmesi.md) and [timing laboratory](../laboratuvarlar/zamanlama-ve-bekleme.md).
 

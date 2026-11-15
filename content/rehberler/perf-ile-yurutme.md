@@ -8,6 +8,60 @@ Static disassembly does not always reveal a binary's actual runtime behavior. Pr
 
 Linux **perf** collects PMU counter and tracepoint data. Cost, time resolution, and coverage depend on the event type, CPU, kernel, perf build, and buffer settings. This guide concerns Linux perf; the Intel PT section also requires supported Intel hardware.
 
+New to performance analysis? Read [performance analysis from zero](performans-analizine-giris.md) first for installation, permissions, and the on-CPU/off-CPU distinction, then return here. The hands-on companion is the [CPU profiling and flame graph lab](../laboratuvarlar/cpu-profili.md).
+
+## 0. perf in five commands
+
+perf is one program with many subcommands. A beginner needs five:
+
+| Command | What it does | Technique |
+| --- | --- | --- |
+| `perf list` | lists the events this machine can count or sample | — |
+| `perf stat ./prog` | counts events for the whole run and prints totals | counting |
+| `perf top` | live, system-wide view of the hottest functions | sampling |
+| `perf record -g ./prog` | samples the program into `perf.data` | sampling |
+| `perf report` / `perf annotate` | reads `perf.data`: by function / by instruction | analysis |
+
+Everything else (`perf trace`, `perf sched`, `perf diff`, `perf script`) builds on these.
+
+### Events
+
+`perf list` groups events into kinds. **Hardware events** such as `cycles`, `instructions`, `cache-misses`, and `branch-misses` come from the CPU's performance monitoring unit (PMU). **Software events** such as `task-clock`, `context-switches`, and `page-faults` are counted by the kernel and work everywhere, including most virtual machines. **Tracepoints** such as `sched:sched_switch` or `syscalls:sys_enter_openat` are named kernel events, the same ones bpftrace uses.
+
+```bash
+perf list hw
+perf list sw
+perf list 'sched:*'
+```
+
+### Reading perf stat
+
+```bash
+perf stat -r 3 ./ornek
+```
+
+The output has one line per event. The fields that matter first:
+
+- **`task-clock` … `CPUs utilized`**: CPU time used, and the average number of CPUs busy during the run. About 1.0 for a single busy thread, close to 0 for a program that mostly waits.
+- **`context-switches`**: how often threads left the CPU. Many switches with low CPU use point to waiting.
+- **`page-faults`**: memory pages touched for the first time or brought in from disk.
+- **`cycles`, `instructions`, `insn per cycle`**: instructions per cycle (IPC) indicates how efficiently the CPU executes; low IPC often means waiting for memory. These need a PMU.
+- **`+- 1.23%`**: with `-r`, the variation between repeated runs.
+- **`(66.67%)` at the end of a line**: the event was only counted for that share of the time because more events were requested than the PMU has counters (multiplexing); perf scales the value. Request fewer events for exact counts.
+- **`<not supported>` or `<not counted>`**: the event is unavailable here. That is not zero.
+
+### Call graphs and symbols
+
+`perf record -g` uses the frame-pointer chain by default. Two alternatives exist when frame pointers are missing:
+
+```bash
+perf record --call-graph dwarf ./ornek    # copies stack memory, unwinds later with debug info; large files
+perf record --call-graph lbr ./ornek      # hardware last-branch record; supported Intel CPUs only, short depth
+```
+
+perf turns addresses into names with the symbol tables and debug information of the binaries that were running. Keep the same files in place until you have run `perf report`; rebuilding the program before reporting breaks symbol resolution. Use `perf report --sort dso,symbol` to see which binary or library each sample belongs to, and `perf buildid-list` to see which builds were recorded.
+
+
 ## 1. Hardware sampling
 
 Rather than stopping at every instruction, perf can use **sampling**.
@@ -38,7 +92,31 @@ After capture, inspect `perf.data` in the terminal:
 perf report -g 'graph,0.5,caller'
 ```
 
-No perf run was performed in this session, so no numerical report is presented. Save your report with `perf report --stdio`. `[.]` denotes user-space symbols and `[k]` kernel symbols. `Self` is the function's own share of the selected event, which need not measure wall-clock time. `Children` can include cumulative descendant contributions, causing overlap between rows. `caller` indicates caller orientation; do not read that tree as a list of callees. Call-chain accuracy depends on frame-pointer/DWARF methods and the build.
+This guide shows no numerical report of its own; the [CPU profiling lab](../laboratuvarlar/cpu-profili.md) produces one with expected results you can check. Save your report with `perf report --stdio`. `[.]` denotes user-space symbols and `[k]` kernel symbols. `Self` is the function's own share of the selected event, which need not measure wall-clock time. `Children` can include cumulative descendant contributions, causing overlap between rows. `caller` indicates caller orientation; do not read that tree as a list of callees. Call-chain accuracy depends on frame-pointer/DWARF methods and the build.
+
+### Flame graphs
+
+A flame graph draws all sampled stacks at once: width is the share of samples, height is stack depth, and the x-axis is sorted alphabetically, not by time. The usual pipeline uses Brendan Gregg's scripts:
+
+```bash
+perf script > out.perf
+./FlameGraph/stackcollapse-perf.pl out.perf > out.folded
+./FlameGraph/flamegraph.pl out.folded > out.svg
+```
+
+Look for wide plateaus at the top: those functions were executing themselves, not just calling others. The [CPU profiling lab](../laboratuvarlar/cpu-profili.md) walks through a complete example, including reading the folded text.
+
+### perf for waiting, not just computing
+
+Sampling CPU cycles cannot see a sleeping thread. For programs that wait, two perf tools trace instead of sampling:
+
+```bash
+sudo perf trace -s ./ornek           # per-thread system call counts and times
+sudo perf sched record ./ornek       # scheduler events
+sudo perf sched latency              # per-task scheduling delay summary
+```
+
+The [debugging playbook](debug-is-akisi.md) and [scheduler timelines](zamanlayici-izleri.md) explain how to interpret them.
 
 ## 3. Intel Processor Trace
 
@@ -73,3 +151,5 @@ Continue with [events with eBPF](ebpf-ile-olaylar.md) for syscall and user-funct
 - [Intel PT Documentation — Linux Kernel](https://github.com/torvalds/linux/blob/v6.12/tools/perf/Documentation/perf-intel-pt.txt)
 - [Brendan Gregg: Linux perf Examples](https://www.brendangregg.com/perf.html)
 - [Brendan Gregg: Flame Graphs](https://www.brendangregg.com/flamegraphs.html)
+- [perf wiki tutorial](https://perfwiki.github.io/main/tutorial/)
+- [perf-stat(1)](https://man7.org/linux/man-pages/man1/perf-stat.1.html) and [perf-record(1)](https://man7.org/linux/man-pages/man1/perf-record.1.html)

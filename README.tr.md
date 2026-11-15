@@ -8,13 +8,15 @@ Linux'ta ELF yüklemesi, ikili dosya analizi ve çalışma zamanı gözlemi üze
 
 ## Araştırma kapsamı
 
-execmap bir programı ELF dosya düzeninden başlayarak bağlama ve süreç başlangıcı üzerinden bellek eşlemelerine ve gözlenen çalışmaya kadar izler. On sekiz rehber birbirine bağlı üç alanı kapsar:
+execmap bir programı ELF dosya düzeninden başlayarak bağlama ve süreç başlangıcı üzerinden bellek eşlemelerine ve gözlenen çalışmaya kadar izler. Yirmi dört rehber birbirine bağlı üç alanı kapsar:
 
 - **ELF ve yükleme:** segmentler ve bölümler, adres çevirisi, ayrıştırıcı doğrulaması, bağlayıcı düzeni, yardımcı vektörler, yeniden konumlandırmalar ve sembol çözümleme.
 - **İkili dosya analizi:** sembolleri silinmiş çalıştırılabilir dosyalar, sürüm karşılaştırma, kullanıcı alanı yükleyicileri, paketlenmiş kod, core dosyaları ve süreç anlık görüntüleri.
 - **Çalışma zamanı gözlemi:** perf örneklemesi, Intel PT, eBPF olayları, gözlemci etkisi ve eksik izlerin yorumlanması.
 
-Dokuz laboratuvar şunları inceler: GDB ile komut komut ilerleme, dallanmalar ve işaretçiler, bellek izinleri, sembol araya girmesi (interposition), ayrı hata ayıklama bilgisi, derleyici iyileştirmesi, çalışma zamanı zamanlaması, sıra eşleştirme ve iş parçacığı başına sayaçlar. Her biri kaynak kodu, komutları ve beklenen gözlemleri içerir. Yeni bir assembly hazırlık rehberi, sembolsüz ikili dosya analizinden önceki iki GDB laboratuvarına götürür. Yazılar, gezinme, arama ve ortak arayüz denetimleri İngilizcedir. Mevcut genel URL yolları ve kaynak tanımlayıcıları korunur.
+Başlangıç yolu, çalışma zamanı performans analizini ve hata ayıklamayı sıfırdan öğretir: [sıfırdan performans analizi](content/rehberler/performans-analizine-giris.md), [sıfırdan bpftrace](content/rehberler/bpftrace-temelleri.md) ve [belirtiye dayalı hata ayıklama rehberi](content/rehberler/debug-is-akisi.md). Her biri, beklenen sayıları kaynak koddan çıkarılabilen bir laboratuvarla eşleşir: [CPU profili ve flame graph](content/laboratuvarlar/cpu-profili.md), [bpftrace ile ilk adımlar](content/laboratuvarlar/bpftrace-ilk-adimlar.md), [CPU dışı yavaşlığın teşhisi](content/laboratuvarlar/yavas-program-teshisi.md).
+
+On dört laboratuvar şunları inceler: GDB ile komut komut ilerleme, dallanmalar ve işaretçiler, bellek izinleri, sembol araya girmesi (interposition), ayrı hata ayıklama bilgisi, derleyici iyileştirmesi, CPU profili, ilk bpftrace programları, CPU dışı bekleme teşhisi, çalışma zamanı zamanlaması, sıra eşleştirme, iş parçacığı başına sayaçlar, fonksiyon probları ve zamanlayıcı zaman çizelgeleri. Her biri kaynak kodu, komutları ve beklenen gözlemleri içerir. Yeni bir assembly hazırlık rehberi, sembolsüz ikili dosya analizinden önceki iki GDB laboratuvarına götürür. Yazılar, gezinme, arama ve ortak arayüz denetimleri İngilizcedir. Mevcut genel URL yolları ve kaynak tanımlayıcıları korunur.
 
 ## Yöntem ve literatür
 
@@ -75,6 +77,18 @@ Ayrıca taşınabilir aritmetik örneklerini ve entropi karşı örneklerini ça
 Çıktılar ve JSON sonuçları `output/technical-validation/` dizinine yazılır. Bu denetim
 ayrıştırıcının bellek erişimini ve seçili örnekleri sınar; ELF'in Linux'ta
 yüklenebilirliğini sınamaz.
+
+Başlangıç perf/bpftrace laboratuvarlarının taşınabilir bir denetimi vardır: C
+programlarını Markdown'dan çıkarır, `-Werror` ile derler ve sayfaların vaat ettiği
+belirlenimci sonuçları ve zaman ilişkilerini (baskın aşama, karesel ölçeklenme,
+her düzeltmenin etkisi) doğrular:
+
+```sh
+python3 scripts/verify-perf-labs.py
+```
+
+Sonuçlar `output/perf-lab-validation/` dizinine yazılır. perf veya bpftrace
+çalıştırmaz; araç çıktıları yine Linux'ta denetlenmelidir.
 
 İsteğe bağlı API denetimleri yalıtılmış, sürümü sabitlenmiş Python bağımlılıkları kullanır:
 
