@@ -147,8 +147,16 @@ function sidebar(current) {
   return `<aside lang="en" class="reading-sidebar" aria-label="Guide directory"><details class="sidebar-menu" open><summary>${treeIcon('guides', 'tree-icon tree-root-icon', 'site')}<span>Contents</span>${treeIcon('chevron-down', 'tree-chevron', 'site')}</summary><nav class="sidebar-links" aria-label="Reading tree">${file(home, 'tree-index')}${branches.join('')}</nav></details></aside>`;
 }
 
+// The lead repeats the first paragraph when the description was cut from it.
+const visibleText = html => html.replace(/<[^>]+>/g, '').replace(/&(amp|lt|gt|quot|#39);/g, (_, name) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[name]).replace(/\s+/g, ' ').trim();
+function leadRepeatsBody(lead, html) {
+  const first = html.match(/^\s*<p>([\s\S]*?)<\/p>/);
+  const text = visibleText(lead).replace(/…$/, '').trim();
+  return Boolean(first && text && visibleText(first[1]).startsWith(text));
+}
 function article(page) {
   const { html, toc } = renderMarkdown(page);
+  const lead = leadRepeatsBody(e(page.description), html) ? '' : `<p class="article-lead">${e(page.description)}</p>`;
   const ordered = page.kind === 'laboratuvar' ? labs : guides;
   const index = ordered.findIndex(item => item.id === page.id);
   const previous = index > 0 ? ordered[index - 1] : null;
@@ -156,7 +164,7 @@ function article(page) {
   const parent = page.kind === 'laboratuvar' ? ['laboratuvarlar/index', 'Labs'] : page.kind === 'rehber' ? ['rehberler/index', 'Guides'] : null;
   const breadcrumbs = `<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${url('index')}">execmap</a><span aria-hidden="true">/</span>${parent ? `<a href="${url(parent[0])}">${parent[1]}</a><span aria-hidden="true">/</span>` : ''}<span aria-current="page">${e(page.title)}</span></nav>`;
   const tocHtml = (open = true) => `<details class="toc-details"${open ? ' open' : ''}><summary>On this page</summary><ol>${toc.map(item => `<li class="toc-depth-${item.depth}"><a href="#${e(item.id)}">${e(item.title)}</a></li>`).join('')}</ol></details>`;
-  return documentHtml({ title: page.title, description: page.description, current: page.id, article: true, body: `<div class="reading-layout">${sidebar(page.id)}<main id="main" lang="en" class="reading-main" tabindex="-1">${breadcrumbs}<article lang="en" data-pagefind-body><header class="article-header"><p class="eyebrow">${e(page.section)} / ${page.kind === 'laboratuvar' ? 'practice' : page.kind === 'sayfa' ? 'reference' : 'guide'}</p><h1>${e(page.title)}</h1><div class="article-meta console-meta"><span>${page.minutes} min read</span><span>English · Linux</span><a href="${asset(`raw/${page.id}.md`)}" download>Source Markdown ↓</a></div><p class="article-lead">${e(page.description)}</p></header><div class="mobile-toc">${tocHtml(false)}</div><div class="prose">${html}</div></article>${previous || next ? `<nav class="page-neighbors" aria-label="Previous and next page">${previous ? `<a href="${url(previous.id)}"><small>← Previous</small>${e(previous.title)}</a>` : '<span></span>'}${next ? `<a href="${url(next.id)}"><small>Next →</small>${e(next.title)}</a>` : '<span></span>'}</nav>` : ''}</main><aside lang="en" class="reading-toc" aria-label="Sections on this page">${tocHtml()}<a class="toc-top" href="#main">Back to top ↑</a></aside></div>` });
+  return documentHtml({ title: page.title, description: page.description, current: page.id, article: true, body: `<div class="reading-layout">${sidebar(page.id)}<main id="main" lang="en" class="reading-main" tabindex="-1">${breadcrumbs}<article lang="en" data-pagefind-body><header class="article-header"><p class="eyebrow">${e(page.section)} / ${page.kind === 'laboratuvar' ? 'practice' : page.kind === 'sayfa' ? 'reference' : 'guide'}</p><h1>${e(page.title)}</h1><div class="article-meta console-meta"><span>${page.minutes} min read</span><span>English · Linux</span><a href="${asset(`raw/${page.id}.md`)}" download>Source Markdown ↓</a></div>${lead}</header><div class="mobile-toc">${tocHtml(false)}</div><div class="prose">${html}</div></article>${previous || next ? `<nav class="page-neighbors" aria-label="Previous and next page">${previous ? `<a href="${url(previous.id)}"><small>← Previous</small>${e(previous.title)}</a>` : '<span></span>'}${next ? `<a href="${url(next.id)}"><small>Next →</small>${e(next.title)}</a>` : '<span></span>'}</nav>` : ''}</main><aside lang="en" class="reading-toc" aria-label="Sections on this page">${tocHtml()}<a class="toc-top" href="#main">Back to top ↑</a></aside></div>` });
 }
 function listing(kind) {
   const isLab = kind === 'laboratuvarlar';
