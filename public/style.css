@@ -33,6 +33,7 @@
 .section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 22px; }
 .section-heading .eyebrow { margin-bottom: 7px; }
 .section-heading h2 { font-size: var(--text-h2); margin: 0; font-weight: 500; }
+.section-heading .section-note { color: var(--muted); font-size: var(--text-xs); margin: 8px 0 0; }
 .section-heading > a,.section-count { max-width: 100%; overflow-wrap: anywhere; font-size: var(--text-xs); flex-shrink: 0; }
 .section-count { color: var(--muted); }
 .route-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); border: 1px solid var(--line); }
@@ -70,7 +71,6 @@
 .lab-number > span { color: var(--muted); }
 .lab-card h3,.lab-card h2 { font-size: 1rem; margin: 17px 0 11px; line-height: 1.6; }
 .lab-card p { color: var(--muted); font-size: var(--text-xs); margin: 0 0 22px; line-height: 1.9; }
-.lab-bottom { margin-top: auto; font-size: var(--text-xs); color: var(--muted); padding-top: 12px; border-top: 1px dashed var(--line); }
 .source-banner { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 46px; border-block: 1px solid var(--line); padding: 28px 0; }
 .source-banner h2 { margin: 0 0 12px; font-size: 1.25rem; }
 .source-banner p:not(.eyebrow) { color: var(--muted); font-size: var(--text-sm); margin: 0; line-height: 1.9; }
