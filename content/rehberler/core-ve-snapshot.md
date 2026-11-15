@@ -12,7 +12,7 @@ For reverse engineering and forensics, a core can preserve decrypted strings, in
 
 An `ET_CORE` file differs from an executable (`ET_EXEC` or `ET_DYN`):
 
-- It usually **has no section header table** (`e_shnum = 0`).
+- A core written by the kernel usually **has no section header table** (`e_shnum = 0`). This is not a property of every producer: GDB's `gcore`, covered below, writes one. A GDB 13.1 snapshot of a small aarch64 process had 14 section headers (a `note0` section and `load` sections) on November 14, 2026, so do not identify a core by their absence.
 - Linux process cores generally use **`PT_LOAD`** for memory ranges and **`PT_NOTE`** for process/thread information; details depend on the producer.
 
 ```text
@@ -54,21 +54,21 @@ gdb ./ornek ./core
 
 Useful forensic commands in the GDB session include:
 
-```bash
+```text gdb
 # 1. Show the crashing function and source line (backtrace)
-(gdb) bt full
+bt full
 
 # 2. List processor registers
-(gdb) info registers
+info registers
 
 # 3. Disassemble from the current instruction (portable GDB PC alias)
-(gdb) x/10i $pc
+x/10i $pc
 
 # 4. Display process mappings (files and anonymous memory)
-(gdb) info proc mappings
+info proc mappings
 
 # 5. Inspect local variables in the stack frame
-(gdb) info locals
+info locals
 ```
 
 ## 3. Snapshotting a live process with gcore

@@ -15,7 +15,16 @@ The GOT/PLT mechanism helps explain external calls, function hooking, and RELRO 
 
 ## 1. How the GOT and PLT interact
 
-The following diagram illustrates the first `puts("Hello")` call as it passes through the PLT and GOT:
+The walk-through below holds only under **lazy binding**. With immediate binding (`-z now`, or `LD_BIND_NOW` set in the environment), the dynamic linker resolves function relocations at startup, so the very first call already reaches `puts` and no resolver step can be observed. Do not assume your toolchain links lazily: Ubuntu, for example, lists `BIND_NOW` among its [default compiler and linker flags](https://documentation.ubuntu.com/security/security-features/process-memory/compiler-flags/). To reproduce the sequence, request lazy binding explicitly and check the dynamic section:
+
+```bash
+gcc -Wl,-z,lazy ornek.c -o ornek
+readelf -dW ./ornek | grep NOW
+```
+
+No output means no immediate-binding flag was recorded. A `BIND_NOW` entry in `FLAGS`, or `NOW` in `FLAGS_1`, means the file is bound at startup; in Debian bookworm checks with GNU ld 2.40 (x86-64 and aarch64) on November 14, 2026, `-z now` produced both and `-z lazy` neither. `LD_BIND_NOW` in the environment still forces immediate binding at run time ([ld.so(8)](https://man7.org/linux/man-pages/man8/ld.so.8.html)).
+
+With that precondition, the following schematic illustrates the first `puts("Hello")` call as it passes through the PLT and GOT. `GOT[puts]` stands for the function's `.got.plt` slot; `GOT+8` and `GOT+16` are the second and third words of `.got.plt`, which the dynamic linker fills with its link-map pointer and resolver address:
 
 ```text
 User code                  PLT (.plt)                    GOT (.got.plt)
@@ -29,13 +38,15 @@ User code                  PLT (.plt)                    GOT (.got.plt)
                                      v
                           +------------------------+    +-------------------------+
                           | PLT0 (common resolver) | -> | _dl_runtime_resolve()   |
-                          |   push *GOT[1]         |    | Find puts in libc.so    |
-                          |   jmp  *GOT[2]         |    | and update GOT[puts]    |
+                          |   pushq GOT+8(%rip)    |    | Find puts in libc.so    |
+                          |   jmp *GOT+16(%rip)    |    | and update GOT[puts]    |
                           +------------------------+    +-------------------------+
                                                                    |
                                                                    v
                                                         Execute resolved puts()
 ```
+
+The stub text follows the lazy PLT of the [x86-64 psABI](https://gitlab.com/x86-psABIs/x86-64-ABI). Builds with `-fcf-protection` can use a variant with `endbr64` and a separate `.plt.sec`; compare against `objdump -d -j .plt` output from your own file rather than the schematic.
 
 ### Lazy binding, step by step
 

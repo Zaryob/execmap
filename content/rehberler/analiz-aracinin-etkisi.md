@@ -61,7 +61,7 @@ Compile with `cc -Wall -Wextra -Werror tracer.c -o tracer`. A tracer visible in 
 
 Analysts often use `LD_PRELOAD` or `ltrace` to follow external calls. A binary can bypass the C library (`glibc`) and communicate directly with the kernel using the `syscall` instruction:
 
-```assembly
+```text asm
 # x86-64 direct SYS_write (1) call
 movq $1, %rax           # Syscall number (SYS_write)
 movq $1, %rdi           # Argument 1: stdout (fd 1)

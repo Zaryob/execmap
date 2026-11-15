@@ -32,6 +32,9 @@ Learn with small experiments you can compile and run in your own terminal:
 - **[Symbol selection](laboratuvarlar/sembol-secimi.md)**: Interpose on a call with `LD_PRELOAD` without modifying the executable.
 - **[Debug information](laboratuvarlar/debug-bilgisi.md)**: Separate DWARF data, strip the working binary, and reconnect it to GDB with `.gnu_debuglink`.
 - **[Compiler differences](laboratuvarlar/derleme-farklari.md)**: Examine inlining, stack layout, and loop transformations under `-O0`, `-O2`, and `-Os`.
+- **[Timing and waiting](laboratuvarlar/zamanlama-ve-bekleme.md)**: Compare elapsed and thread CPU time in a C++ workload, validate correlated calls, and investigate period overruns.
+- **[Event correlation](laboratuvarlar/olay-akisini-eslestirme.md)**: Follow six boundaries through direct and queued calls; localize a controlled source or caller wait.
+- **[Thread counters](laboratuvarlar/thread-sayaclari.md)**: Read procfs counter deltas with task identity and accounting checks.
 
 ---
 

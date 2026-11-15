@@ -41,7 +41,7 @@ User-space observer (bpftrace / libbpf / EDR)
 
 ## 2. Practical bpftrace scenarios
 
-These examples require Linux syscall tracepoints, appropriate BPF privileges, and bpftrace. First record `bpftrace --version`, `uname -r`, and `sudo bpftrace -lv "tracepoint:syscalls:sys_enter_mprotect"`. Confirm field names in that output; measure overhead and dropped records separately.
+These examples require Linux syscall tracepoints, appropriate BPF privileges, and bpftrace. First record `bpftrace --version`, `uname -r`, and `sudo bpftrace -lv "tracepoint:syscalls:sys_enter_mprotect"`. Confirm field names in that output; measure overhead and dropped records separately. The scripts on this page read tracepoint fields as `args.start`. That form needs bpftrace 0.19.0 or later, the release whose [changelog](https://github.com/bpftrace/bpftrace/blob/master/CHANGELOG.md) records `args` becoming a structure instead of a pointer; on older releases, such as the 0.17.0 in this project's Debian bookworm test container, write `args->start`, `args->len`, and `args->prot`.
 
 ### Scenario A: processes mapping anonymous memory and changing permissions
 
@@ -97,6 +97,8 @@ sudo bpftool prog list
 ## Investigate further
 
 Read [observer effects](analiz-aracinin-etkisi.md) to understand how targets detect analysis tools. Continue with [interpreting traces](izleri-yorumlamak.md) to connect records to properly bounded hypotheses.
+
+For correlated entry/return and off-CPU experiments on one downloadable workload, use the [runtime latency guide](calisma-zamani-gecikmesi.md) and [timing laboratory](../laboratuvarlar/zamanlama-ve-bekleme.md).
 
 ## Sources
 

@@ -1,13 +1,13 @@
 export const sections = [
   { name: 'ELF and loading', key: 'elf', label: '01', pages: ['elf-dosyadan-bellege', 'elf-parser-ve-adresler', 'linker-duzeni', 'baslangic-ve-auxv', 'dinamik-baglama'] },
-  { name: 'Reverse engineering', key: 're', label: '02', pages: ['assembly-okuma', 'stripped-elf', 'ikili-fark-analizi', 'ozel-yukleyiciler', 'paketli-elf', 'core-ve-snapshot'] },
-  { name: 'Runtime', key: 'tracing', label: '03', pages: ['perf-ile-yurutme', 'ebpf-ile-olaylar', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
+  { name: 'Reverse engineering', key: 're', label: '02', pages: ['assembly-okuma', 'cpp-cagri-zinciri', 'stripped-elf', 'ikili-fark-analizi', 'ozel-yukleyiciler', 'paketli-elf', 'core-ve-snapshot'] },
+  { name: 'Runtime', key: 'tracing', label: '03', pages: ['process-thread-ve-zamanlayici', 'perf-ile-yurutme', 'ebpf-ile-olaylar', 'calisma-zamani-gecikmesi', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
 ];
-export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari'];
+export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari', 'zamanlama-ve-bekleme', 'olay-akisini-eslestirme', 'thread-sayaclari'];
 export const summaries = {
   'assembly-okuma': 'Prepare to read disassembly with registers, addressing, the stack, and System V calling conventions.',
-  'gdb-ilk-inceleme': 'Follow arguments, pointer stores, and function returns instruction by instruction with GDB.',
-  'dallanma-ve-pointer': 'Examine the same condition under O0 and O2; verify data selection and the target memory store.',
+  'gdb-ilk-inceleme': 'Pause a small C program, watch a number change in memory, then change one argument yourself.',
+  'dallanma-ve-pointer': 'Compare two builds of the same condition and catch the moment a pointer target changes.',
   'elf-dosyadan-bellege': 'Headers, segments, and sections. From file offsets to runtime addresses.',
   'elf-parser-ve-adresler': 'Test parser results, validate ranges, and build an inventory with pyelftools.',
   'linker-duzeni': 'Input sections, output sections, VMA, and LMA. Read the layout left by the linker.',
@@ -22,13 +22,19 @@ export const summaries = {
   'ebpf-ile-olaylar': 'Connect syscall, mapping, and uprobe events to process context.',
   'analiz-aracinin-etkisi': 'Direct syscalls, ptrace checks, and observation’s effect on a program.',
   'izleri-yorumlamak': 'Observation, hypothesis, and evidence. Account for time, identity, and missing records.',
-  'bellek-izinleri': 'Change anonymous memory from RW to RX. Examine what a permission change establishes.',
-  'sembol-secimi': 'One executable, two libraries. Compare actual call targets with LD_PRELOAD.',
-  'debug-bilgisi': 'Separate debug data, strip the working copy, and reconnect the names.',
-  'derleme-farklari': 'Use three builds to distinguish optimization from a change in behavior.',
+  'bellek-izinleri': 'Watch a memory page change from writable to executable, then explain what that observation proves.',
+  'sembol-secimi': 'Make the same program print 11 or 22 by choosing which library supplies a function.',
+  'debug-bilgisi': 'Move debugging information to a separate file and help GDB find the source again.',
+  'derleme-farklari': 'Compile one calculation three ways: keep the answer and compare the instructions.',
+  'calisma-zamani-gecikmesi': 'Distinguish call intervals, elapsed duration, CPU service, off-CPU time, and runnable delay.',
+  'zamanlama-ve-bekleme': 'Compare waiting with busy work and separate call duration, CPU time, and the gap between calls.',
+  'process-thread-ve-zamanlayici': 'Identify tasks and interpret cumulative scheduler counters, affinity, policy, frequency, and pressure.',
+  'cpp-cagri-zinciri': 'Inspect C++ member calls, object state, thread boundaries, and architecture-dependent registers with GDB.',
+  'olay-akisini-eslestirme': 'Follow one event across six markers and find where a deliberately added delay appears.',
+  'thread-sayaclari': 'Take two snapshots of a thread and distinguish measured activity from unavailable waiting data.',
 };
 export const routes = [
-  { n: '01', title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.', pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/baslangic-ve-auxv'], code: 'readelf -lW ./ornek' },
-  { n: '02', title: 'From names to behavior', text: 'Understand stripped files and meaningful differences between versions.', pages: ['rehberler/stripped-elf', 'rehberler/dinamik-baglama', 'rehberler/ikili-fark-analizi'], code: 'objdump -d ./ornek' },
-  { n: '03', title: 'Observe runtime', text: 'Test findings with perf samples and eBPF events.', pages: ['rehberler/perf-ile-yurutme', 'rehberler/ebpf-ile-olaylar', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
+  { n: '01', title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.', pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/linker-duzeni', 'rehberler/baslangic-ve-auxv', 'rehberler/dinamik-baglama'], code: 'readelf -lW ./ornek' },
+  { n: '02', title: 'From names to behavior', text: 'Understand stripped files and meaningful differences between versions.', pages: ['rehberler/cpp-cagri-zinciri', 'rehberler/stripped-elf', 'rehberler/ikili-fark-analizi', 'rehberler/ozel-yukleyiciler', 'rehberler/paketli-elf', 'rehberler/core-ve-snapshot'], code: 'objdump -d ./ornek' },
+  { n: '03', title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.', pages: ['rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/ebpf-ile-olaylar', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
 ];

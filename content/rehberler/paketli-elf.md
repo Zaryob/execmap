@@ -4,9 +4,12 @@ title: Analyzing packed and encrypted ELF files
 
 # Analyzing packed and encrypted ELF files
 
+> [!WARNING]
+> The steps on this page run the target: `run` in GDB starts it, the bpftrace command needs root, and unpacking executes the packed code. Practise only on programs you compiled and packed yourself. Handle any sample you did not build inside an isolated virtual machine that you can discard, without access to your files or network; a container shares the host kernel and is not that boundary.
+
 Packers and crypters store a program's original code in compressed or encrypted form and unpack it into memory at runtime. Originally associated with reducing executable size, as with UPX, these techniques are also used to complicate reverse engineering, evade static antivirus signatures, and protect intellectual property.
 
-Static inspection can reveal the unpacking stub, data layout, and possible unpacking mechanism. In-memory analysis may also be necessary. Do not assume every sample unpacks completely at one instant. This guide makes no unverified claim about Burneye's encryption algorithm or historical priority.
+Static inspection can reveal the unpacking stub, data layout, and possible unpacking mechanism. In-memory analysis may also be necessary. Do not assume every sample unpacks completely at one instant.
 
 ## 1. Indicators of packing
 
@@ -59,16 +62,16 @@ RW→RX preserves basic W^X by avoiding simultaneous write and execute permissio
 
 These **Linux x86-64 GDB steps** do not guarantee OEP recovery and were not run against a packed fixture during this revision:
 
-```text
-(gdb) catch syscall mprotect
-(gdb) run
+```text gdb
+catch syscall mprotect
+run
 # At the GDB “call to syscall” entry stop:
-(gdb) set $region = $rdi
-(gdb) set $length = $rsi
-(gdb) set $protection = $rdx
-(gdb) continue
+set $region = $rdi
+set $length = $rsi
+set $protection = $rdx
+continue
 # At the “returned from syscall” exit stop:
-(gdb) p/d (long)$rax
+p/d (long)$rax
 ```
 
 In multithreaded processes, correlate entry and exit by thread. After a successful return, inspect the saved range using mappings and disassembly, then identify the actual control-transfer target. `finish` runs until return from the current function; it is not a syscall-exit command. `$region` is a page address, not necessarily the OEP. Set a breakpoint only at a verified candidate instruction and compare with a known unpacked program ([GDB catchpoints](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Set-Catchpoints.html)).
@@ -83,16 +86,18 @@ sudo bpftrace -e 'tracepoint:syscalls:sys_enter_mprotect /comm == "paketli_ornek
 }'
 ```
 
+`args.start` requires bpftrace 0.19.0 or later; older releases need `args->start`, `args->len`, and `args->prot`. See the [eBPF guide](ebpf-ile-olaylar.md) for the version check and field listing.
+
 ## 4. Dumping memory
 
 Save the relevant ranges at a known unpacking point. With staged unpacking, not all code may be present; core coverage also depends on filters and permissions:
 
-```bash
+```text gdb
 # 1. Generate a core inside GDB (check coverage):
-(gdb) gcore acilmis_program.dump
+gcore acilmis_program.dump
 
 # 2. Or save only the unpacked code page as raw bytes:
-(gdb) dump memory acilmis_kod.bin 0x401000 0x405000
+dump memory acilmis_kod.bin 0x401000 0x405000
 ```
 
 A raw dump is not an ELF file. Import it using its architecture, base address, and range metadata. Missing pages and runtime relocations further complicate rebuilding a runnable file.

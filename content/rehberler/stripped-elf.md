@@ -85,7 +85,7 @@ Without useful unwind information, disassemblers can use architecture-specific p
 
 ### A conventional x86-64 prologue
 
-```assembly
+```text asm
 endbr64                 # f3 0f 1e fa (Intel CET Indirect Branch Tracking)
 pushq   %rbp            # 55
 movq    %rsp, %rbp      # 48 89 e5
@@ -94,7 +94,7 @@ subq    $0x20, %rsp     # Allocate stack space
 
 ### An epilogue
 
-```assembly
+```text asm
 leaveq                  # c9
 retq                    # c3
 ```

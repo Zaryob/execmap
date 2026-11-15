@@ -63,6 +63,8 @@ Intel PT can observe control flow without a ptrace relationship or conventional 
 
 ## Investigate further
 
+Use the [runtime latency guide](calisma-zamani-gecikmesi.md) and [timing laboratory](../laboratuvarlar/zamanlama-ve-bekleme.md) for a reproducible sleep/busy comparison and `perf sched` wait-time versus runnable-delay analysis.
+
 Continue with [events with eBPF](ebpf-ile-olaylar.md) for syscall and user-function observation. Read [observer effects](analiz-aracinin-etkisi.md) to understand how analysis tools can be detected by a target.
 
 ## Sources

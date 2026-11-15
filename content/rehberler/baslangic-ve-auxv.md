@@ -31,7 +31,7 @@ When the processor transfers control to the user-space entry point, the stack po
 
 On glibc-based systems, `_start` is located at an executable's `e_entry` address (`sysdeps/x86_64/start.S`). The fragment below schematically explains the glibc 2.40 Linux x86-64 LP64 startup contract. It is not a standalone CRT implementation covering x32, static PIE, and architecture-specific details. Link normal applications with the CRT supplied by the compiler:
 
-```assembly
+```text asm
 .global _start
 _start:
     xorl %ebp, %ebp        # Clear RBP to mark the end of the call stack for unwinding
@@ -86,7 +86,7 @@ int main(void) {
 
     printf("Program entry     (AT_ENTRY) : 0x%lx\n", entry);
     printf("Program headers  (AT_PHDR)  : 0x%lx\n", phdr);
-    printf("vDSO address     (AT_SYSINFO): 0x%lx\n", vdso);
+    printf("vDSO address     (AT_SYSINFO_EHDR): 0x%lx\n", vdso);
 
     if (rnd) {
         printf("Random bytes     (AT_RANDOM): ");
@@ -99,17 +99,19 @@ int main(void) {
 }
 ```
 
+`AT_SYSINFO_EHDR` is the address of the vDSO's ELF header. It is a different key from `AT_SYSINFO`, a vDSO system-call entry point that [getauxval(3)](https://man7.org/linux/man-pages/man3/getauxval.3.html) lists as absent on x86-64.
+
 ## 4. auxv in security and reverse engineering
 
 ### AT_SECURE and LD_PRELOAD restrictions
 
 `AT_SECURE` indicates secure-execution mode; effective UID/GID changes, capability acquisition, and security module decisions may contribute. Setting a file's setuid bit alone does not guarantee this mode on every execution.
 
-In secure-execution mode, glibc ignores `LD_LIBRARY_PATH`. For `LD_PRELOAD`, paths containing slashes are ignored; there is a narrow exception for preload objects with the setuid bit in standard directories. Removing variables from the program environment and processing them under restrictions are separate matters. `DT_RPATH`/`DT_RUNPATH` are not simply eliminated; the claim that only the cache and system directories remain is incorrect. See [ld.so(8)](https://man7.org/linux/man-pages/man8/ld.so.8.html).
+In secure-execution mode, glibc ignores `LD_LIBRARY_PATH`. For `LD_PRELOAD`, paths containing slashes are ignored; there is a narrow exception for preload objects with the setuid bit in standard directories. Removing variables from the program environment and processing them under restrictions are separate matters. `DT_RPATH`/`DT_RUNPATH` are not simply eliminated in this mode. See [ld.so(8)](https://man7.org/linux/man-pages/man8/ld.so.8.html).
 
 ### AT_RANDOM and stack canaries
 
-For stack-protector checks (`-fstack-protector`), glibc derives the stack canary from the 16 random bytes addressed by `AT_RANDOM`. On the x86-64 glibc path, the guard is stored in the thread control block, accessed through the FS register.
+For stack-protector checks (`-fstack-protector`), glibc does not use all 16 random bytes addressed by `AT_RANDOM` for the canary. In glibc 2.40, `_dl_setup_stack_chk_guard` copies the first pointer-sized part (8 bytes on x86-64) and then clears one byte of it, the lowest-addressed byte on little-endian targets, so the canary begins with a zero byte in memory. `_dl_setup_pointer_guard` takes the following 8 bytes as the pointer guard, a separate value used to mangle stored code pointers ([dl-osinfo.h](https://github.com/bminor/glibc/blob/glibc-2.40/sysdeps/generic/dl-osinfo.h)). The bytes printed by the program above are therefore the raw input, not the canary itself. On the x86-64 glibc path, the guard is stored in the thread control block, accessed through the FS register.
 
 ## Investigate further
 

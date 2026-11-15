@@ -17,6 +17,7 @@ import struct
 import subprocess
 import time
 
+import elftools
 import lief
 from elftools.elf.elffile import ELFFile
 
@@ -66,8 +67,9 @@ namespace['analyze_elf']('ornek_yamali')
 with open('ornek_yamali', 'rb') as f:
     assert ELFFile(f).header['e_entry'] == entry
 report = dict(host=platform.platform(), lief=lief.__version__,
+              pyelftools_version=elftools.__version__,
               lief_check='PASS: entry and bytes in executable PT_LOAD; not Linux-executed',
-              pyelftools='PASS: 0.32 inventory and entry check',
+              pyelftools=f'PASS: {elftools.__version__} inventory and entry check',
               frida='not requested', fq='not requested')
 # Regression guard for the section-table precondition found during validation.
 without_sections = bytearray(data[:129])

@@ -1,0 +1,47 @@
+Debugging and event-correlation integration validation — November 15, 2026
+
+Executed on native aarch64 Linux in an Ubuntu 22.04 container:
+  Linux 6.12.76-linuxkit, GCC 11.4.0, GNU GDB 12.1.
+  python3 scripts/verify-debugging-labs.py --require-linux --gdb
+The container used --output /evidence, bound to the local
+output/debugging-validation-linux directory.
+
+Passed:
+  - Published C++11 source compiled with -Wall -Wextra -Wpedantic; no diagnostics.
+  - direct/queued modes, each with baseline/source-gap/dispatch-wait scenarios.
+  - Eight complete invocations and 48 records per capture.
+  - Expected one-TID direct and two-TID queued relationships.
+  - Controlled source and caller waits observed at the intended boundaries.
+    A broad lower bound checks the injected wait, not a portable latency target.
+  - Synthetic known stage durations and cross-thread interleaved sequences.
+  - Fourteen malformed, incomplete, mixed-run, or wrong-thread traces rejected.
+  - Invalid CLI arguments and /dev/full output failure rejected.
+  - Published C++ member GDB session: Worker::process -> Dispatcher::dispatch
+    -> main, seq=1, completed=0 at entry and 1 after return; normal exit.
+  - Live procfs sample against a finite timing_lab child.
+  - Counter-delta, process/task identity replacement, reversed-counter, and
+    parenthesized task-name fixtures.
+
+The live kernel reported scheduler statistics disabled or unknown. Runtime and
+raw samples were retained; runqueue_wait_ns was null. No positive live runqueue
+latency measurement or enabling of accounting is claimed. Enabled-counter
+subtraction was checked with synthetic data only.
+
+Portable analyzer/procfs fixtures also passed on macOS; Linux execution is
+explicitly skipped there. --require-linux turns that skip into a failure.
+
+Site checks passed with /execmap and empty URL prefixes: 20 tests each.
+Existing browser suite: 13 passed and one intentional duplicate-viewport skip
+per prefix. Four new reading pages also passed 320/390/1440 px overflow checks;
+download requests succeeded and published assets match their tested sources.
+
+Exact commands, compiler/OS versions, source/binary hashes, CSVs, raw procfs
+samples and GDB logs are in output/debugging-validation-linux/report.json and
+its companion files. Generated measurements are not part of the publication.
+CI is configured to run the verifier; a hosted x86-64 CI run is not claimed as
+already observed locally.
+
+Not executed: perf/BPF capture or attach, remote GDB/IDE flows, optional
+watchpoints and x86-64 entry-register checks, sanitizers, scheduler/frequency
+changes, or lockup reproduction. Private application history and measurements
+from the supplied report were not imported as laboratory evidence.

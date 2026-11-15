@@ -84,7 +84,7 @@ The dot (`.`) is the **location counter**. It advances as the linker lays out se
 
 ## 4. Examining the link map
 
-Pass `-Wl,-Map,proje.map` during the build to inspect the layout in detail:
+Pass `-Wl,-Map,cikis.map` during the build to inspect the layout in detail:
 
 ```bash
 gcc -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections,-Map,cikis.map main.c helper.c -o program

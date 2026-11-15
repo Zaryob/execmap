@@ -1,0 +1,4 @@
+build*/
+results/
+trace.csv
+__pycache__/

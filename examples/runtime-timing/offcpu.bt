@@ -1,0 +1,10 @@
+tracepoint:sched:sched_switch
+/args->prev_pid == $1/
+{ @out[args->prev_pid] = nsecs(monotonic); }
+tracepoint:sched:sched_switch
+/args->next_pid == $1 && @out[args->next_pid]/
+{
+    @offcpu_ns = hist(nsecs(monotonic) - @out[args->next_pid]);
+    delete(@out[args->next_pid]);
+}
+END { clear(@out); }

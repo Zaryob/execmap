@@ -4,13 +4,26 @@ title: Observing a memory permission change
 
 # Observing a memory permission change
 
-This laboratory examines an anonymous mapping changing from writable (`RW`) to executable (`RX`), preserving basic **W^X** by avoiding simultaneous write and execute permissions. The example deliberately does not execute code from the mapping, demonstrating that execute permission alone does not establish execution.
+Give a memory region permission to run code, then ask: **does that prove any code actually ran there?**
 
-## 1. Requirements and preparation
+This program first makes a page readable and writable, writes one byte, then changes it to readable and executable. It never calls that memory as a function. Your goal is to observe the permission change and explain the limit of that observation.
 
-Use a standard Linux system, GCC or Clang, and `strace`.
+## Before you start
 
-Create `izin.c` in a temporary working directory:
+Use Linux, GCC or Clang, and `strace`. Python 3.7 or newer is needed only for the optional automatic mapping viewer in step 4.
+
+A **mapping** is a range of virtual addresses assigned to a process. The permission letters used here are `R` for read, `W` for write, and `X` for execute. The program uses `RW`, then `RX`; it does not make this mapping writable and executable at the same time.
+
+In a Linux terminal, create an empty working directory:
+
+```bash
+mkdir -p ~/execmap-labs/memory-permissions
+cd ~/execmap-labs/memory-permissions
+```
+
+## 1. Save the small program
+
+Create a file named `izin.c` with this content:
 
 ```c
 #include <stdio.h>
@@ -53,70 +66,110 @@ int main(void) {
 }
 ```
 
-## 2. Compilation and syscall tracing
+Follow the program's three actions before running it:
 
-Build with debug symbols and run with filtered system-call tracing:
+1. `mmap` asks Linux for a page of memory with read/write permissions.
+2. `mprotect` changes that same page to read/execute permissions after five seconds.
+3. `munmap` releases the page after another five seconds.
+
+The page size comes from the system. The byte `0x90` is only written as data; there is no call or jump into the page.
+
+## 2. Build and run with strace
+
+In the terminal:
 
 ```bash
 gcc -Wall -Wextra -O0 -g izin.c -o izin
 strace -e trace=mmap,mprotect,munmap ./izin
 ```
 
-The published C source was run on Linux 6.12.76 aarch64 with glibc 2.36 on November 7, 2026: strace and procfs both confirmed RW → RX. An additional unaligned-address control returned `EINVAL`. The excerpt below remains schematic; use your own page size, PID, and addresses:
+`strace` shows selected requests the program makes to the kernel. The run takes about ten seconds because the program deliberately pauses twice. Wait until it exits before typing another command in this terminal.
+
+The program prints its own PID, the address named `area`, and the allocation size. **Use the address from your run** to locate the relevant trace entries.
+
+> [!NOTE]
+> Loading libraries also produces mapping calls. Follow the `area` address printed by this program rather than assuming the first `mmap` belongs to your allocation.
+
+## 3. Read the three important results
+
+The following is a schematic example, not output you must match byte for byte:
 
 ```text
 mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7fa289c00000
 pid=25410 area=0x7fa289c00000 size=4096 (State: RW)
 mprotect(0x7fa289c00000, 4096, PROT_READ|PROT_EXEC) = 0
 mprotect changed permissions to RX; no code is executed in this region!
-munmap(0x7fa289c00000, 4096)            = 0
+munmap(0x7fa289c00000, 4096) = 0
 +++ exited with 0 +++
 ```
 
-> [!NOTE]
-> The dynamic linker (`ld-linux.so`) also makes `mmap` and `mprotect` calls while loading libraries. Focus on entries matching the `area` address printed by this program.
+Read it in order. `mmap` returns the new address. `mprotect` uses that address again and returns 0 for success. `munmap` releases it and also returns 0.
 
-## 3. Inspecting /proc/PID/maps from another terminal
+**Your checkpoint:** find your own `area` address in the permission-changing call. The address, PID, and page size can differ from this illustration.
 
-During each `sleep(5)`, open another terminal and inspect mappings using the printed PID.
+At this point you have completed the main observation: Linux accepted a change from `RW` to `RX`. Now check the source: no statement transfers control into `area`. Execute permission allowed a possible action; it did not record that action occurring.
 
-### First five seconds: the RW stage
+## 4. Optional: watch the mapping change automatically
 
-```bash
-grep "7fa289c00000" /proc/25410/maps
-```
+`/proc/PID/maps` lists a live process's memory ranges. A line containing `rw-p` is readable/writable; `r-xp` is readable/executable. The trailing `p` denotes a private mapping.
 
-Schematic line:
-
-```text
-7fa289c00000-7fa289c01000 rw-p 00000000 00:00 0
-```
-
-### Next five seconds: RX after mprotect
+Rather than racing to copy a PID during a five-second pause, use the block below in the **same directory after step 2 has finished**. It starts a fresh `./izin`, reads that run's address, and prints the containing mapping whenever its line changes:
 
 ```bash
-grep "7fa289c00000" /proc/25410/maps
+python3 - <<'PY'
+from pathlib import Path
+import re
+import subprocess
+import time
+
+with subprocess.Popen(['./izin'], stdout=subprocess.PIPE, text=True) as process:
+    first = process.stdout.readline()
+    print(first.strip(), flush=True)
+    match = re.search(r'area=(0x[0-9a-fA-F]+)', first)
+    if not match:
+        raise SystemExit('No allocation address was printed; inspect the program error.')
+    address = int(match[1], 16)
+    previous = None
+    while process.poll() is None:
+        try:
+            lines = Path(f'/proc/{process.pid}/maps').read_text().splitlines()
+        except FileNotFoundError:
+            break
+        for line in lines:
+            start, end = line.split()[0].split('-')
+            if int(start, 16) <= address < int(end, 16) and line != previous:
+                print(line, flush=True)
+                previous = line
+        time.sleep(0.2)
+    process.communicate(timeout=15)
+    if process.returncode != 0:
+        raise SystemExit(f'Program exited with {process.returncode}; inspect its error.')
+PY
 ```
 
-Schematic line:
+You should normally see a containing line with `rw-p`, then one with `r-xp`. The script checks whether the address lies *inside* a range: Linux can combine adjacent mappings, so the range does not have to start exactly at `area`.
 
-```text
-7fa289c00000-7fa289c01000 r-xp 00000000 00:00 0
-```
+This is a second run with a new identity. It illustrates the same change through procfs; it does not add evidence of execution. The empty pathname on an unnamed anonymous mapping is normal.
 
-After a successful `mprotect`, expect `rw-p` → `r-xp`. An unnamed anonymous mapping has an empty path; do not expect a generic `[anon]` label. Linux may display named private anonymous mappings as `[anon:name]`.
+## If the experiment does not complete
 
-## 4. Analysis and hypothesis testing
+**`strace` is missing:** install your Linux distribution's strace package before this step, or run `./izin` alone first. Running alone checks the program, but does not produce a syscall trace.
 
-The experiment tests these distinctions:
+**`mmap` or `mprotect` reports an error:** keep that message. A system policy can reject executable anonymous memory, for example with `EPERM` or `EACCES`. A rejected change is not a successful RX observation.
 
-1. **Permission change != code execution**: No control transfer into the target area occurs. A page appearing as `r-xp` is therefore insufficient evidence that malicious in-memory code ran.
-2. **Sampling limits**: The source does not transfer control to the area, but absence of perf samples alone would not prove nonexecution. Sampling can miss brief or rare execution. Mappings and permission changes are not execution records either.
-3. **Security policy: W^X / PaX / SELinux**: Kernel policy, such as SELinux `execmem`, may prohibit adding `PROT_EXEC` to anonymous memory, causing `mprotect` to fail with an error such as `EPERM` or `EACCES`.
+**The PID disappears from procfs:** the process has exited. A new run has a new PID; the automatic viewer obtains it from the child it launches.
 
-## Investigate further
+**There are many unrelated mappings:** focus on the address printed by the program, not a fixed address copied from this page.
 
-Read [custom loaders](../rehberler/ozel-yukleyiciler.md) to understand loaders and packers that change memory permissions. Try the [symbol selection laboratory](sembol-secimi.md) to redirect library calls with `LD_PRELOAD`.
+## What to keep and what it means
+
+Save the printed address, successful `mprotect` result, and, if you used step 4, the before/after mapping lines. Explain why those records establish a permission change but do not establish execution.
+
+The separate RW and RX stages illustrate **W^X** (write xor execute) for this mapping: it is not writable and executable at the same time.
+
+Linux aarch64 validation on November 7, 2026 confirmed the published C program's RW → RX change with strace and procfs. A separate unaligned-address control returned `EINVAL`. Those are bounded validation results; keep your own environment and errors when repeating the lab.
+
+For actual execution evidence, see [custom loaders](../rehberler/ozel-yukleyiciler.md). Sampling can miss brief execution, so the absence of a perf sample alone would not prove nonexecution either. Continue with [symbol selection](sembol-secimi.md) for another small experiment.
 
 ## Sources
 

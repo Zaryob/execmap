@@ -17,8 +17,10 @@ An ELF file can be read from two perspectives: its **linking view** and its **ex
 | ELF header                                            |
 +-------------------------------------------------------+
 | Program header table: segments                        | <-- Kernel / loader
-|   PT_LOAD (RX) -> .text, .rodata                       |     Determines mappings
-|   PT_LOAD (RW) -> .data, .bss                         |     and permissions.
+|   PT_LOAD (R)  -> ELF header, .dynsym, .rela.*        |     Determines mappings
+|   PT_LOAD (RX) -> .init, .plt, .text                  |     and permissions.
+|   PT_LOAD (R)  -> .rodata, .eh_frame                  |
+|   PT_LOAD (RW) -> .dynamic, .got, .data, .bss         |
 |   PT_DYNAMIC   -> .dynamic                            |
 |   PT_INTERP    -> "/lib64/ld-linux-x86-64.so.2"         |
 +-------------------------------------------------------+
@@ -31,6 +33,8 @@ An ELF file can be read from two perspectives: its **linking view** and its **ex
 | Section header table                                  | <-- May be removed
 +-------------------------------------------------------+
 ```
+
+The four `PT_LOAD` rows are schematic and follow what GNU ld currently emits by default for x86-64 Linux, where read-only data is kept apart from code (`-z separate-code`). The count is not fixed: on November 14, 2026, Debian bookworm GNU ld 2.40 builds of the same small C program had four `PT_LOAD` segments on x86-64 and two on aarch64. Read the section-to-segment mapping printed by `readelf -lW` for your own file.
 
 ### Program header table: segments
 
@@ -126,9 +130,14 @@ In GDB, use `starti` rather than `break main` to catch the initial instruction:
 
 ```bash
 gdb -q ./ornek
-(gdb) starti
-(gdb) info proc mappings
-(gdb) x/5i $rip
+```
+
+Then, at the GDB prompt:
+
+```text gdb
+starti
+info proc mappings
+x/5i $rip
 ```
 
 `starti` stops at the first machine instruction. For a dynamically linked executable, `$rip` initially points into `ld-linux.so`; for a static executable it points into the program's own startup code.

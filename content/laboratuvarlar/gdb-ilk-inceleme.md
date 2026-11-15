@@ -5,13 +5,19 @@ description: Observe function arguments, the return address, and stores through 
 
 # A first GDB investigation — from C to machine code
 
-**Question:** How does `hesapla(&sayi, 5)` pass its arguments, when does it change memory, and how does it return a result? Read [assembly preparation](../rehberler/assembly-okuma.md) first. This experiment targets Linux x86-64 with GCC, GNU binutils, and GDB. The C arithmetic can run elsewhere; the register and ELF investigations below require Linux x86-64.
+Follow one small function from its input arguments to the number it changes in memory. You will first get **12** from an ordinary run, then use GDB to change one argument and get **16**.
 
-## 1. Record the environment and hypothesis
+GDB is a debugger: it can pause a program so you can inspect its current state. You do not need to understand every assembly instruction to complete this lab. Focus on one question: **which instruction changes the number?**
 
-Hypothesis: at entry, the first argument is an address and the second is 5. The four-byte memory target changes from 7 to 12, and the function returns 12. Do not fix addresses in advance. Run in a terminal:
+## Before you start
+
+Use **Linux x86-64**, GCC, GNU binutils, and GDB. Basic C functions and pointers are enough; the [assembly preparation guide](../rehberler/assembly-okuma.md) explains registers and the stack. The C program can run on other systems, but the register commands below are specific to Linux x86-64.
+
+Open a Linux terminal and create a separate working directory. Keep using this terminal unless a step explicitly says “inside GDB”:
 
 ```bash
+mkdir -p ~/execmap-labs/first-gdb
+cd ~/execmap-labs/first-gdb
 uname -sm
 gcc --version
 gcc -dumpmachine
@@ -21,11 +27,11 @@ gdb --version
 getconf GNU_LIBC_VERSION
 ```
 
-Expect `x86_64` from `uname -m`. On macOS, the name `gcc` may refer to Clang; use these inspection commands in the Linux environment. The debugger traces a process it starts itself; attaching to a separate process is unnecessary. If a container or sandbox prevents `ptrace`, do not report ordinary program execution as GDB validation.
+**Check before continuing:** `uname -sm` should identify Linux and `x86_64`. Save the version output with your notes. On macOS, a command named `gcc` may actually be Clang; run this investigation inside the intended Linux environment.
 
-## 2. Create the small program
+## 1. Create and run the program
 
-Save this as `ilk-inceleme.c`:
+Save the following source in this directory as `ilk-inceleme.c`:
 
 ```c
 #include <stdio.h>
@@ -44,6 +50,10 @@ int main(void) {
 }
 ```
 
+The main program starts `sayi` at 7. It passes the **address** of that number and the increment 5 to `hesapla`. Inside the function, `hedef` points to the number and `artis` holds the increment. The function writes 7 + 5 into the original number, then returns that value.
+
+In the terminal, compile and run it:
+
 ```bash
 gcc -std=c11 -Wall -Wextra -Werror -O0 -g -fno-omit-frame-pointer ilk-inceleme.c -o ilk-inceleme
 ./ilk-inceleme
@@ -52,13 +62,25 @@ readelf -hW ./ilk-inceleme
 objdump -d -M intel --disassemble=hesapla ./ilk-inceleme
 ```
 
-Expected stdout is `value=12 result=12`, with exit code 0. `-g` adds debug data; `-O0` and a frame pointer make inspection easier. They do not guarantee one instruction per source line or a fixed prologue. See [GCC debugging options](https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html). The distribution's PIE default is retained; record the ELF type from your own `readelf` output.
+The program should print:
 
-## 3. Stop at the first machine instruction
+```text
+value=12 result=12
+```
 
-Open `gdb -q ./ilk-inceleme` in the terminal. The following blocks contain GDB commands; do not prefix them with `(gdb)`:
+`value` is the number stored in `main`; `result` is the returned value. They should agree. `-g` adds debugger information and `-O0` keeps this first investigation easier to follow. `readelf` describes the executable; `objdump` shows the machine instructions for `hesapla`. Addresses and exact instructions can differ on your machine.
 
-```gdb
+## 2. Pause at the function's first instruction
+
+In the same terminal, open the debugger:
+
+```bash
+gdb -q ./ilk-inceleme
+```
+
+You should now see a `(gdb)` prompt. Enter the next block **inside GDB**, without typing the prompt itself:
+
+```text gdb
 set pagination off
 set disassembly-flavor intel
 set disable-randomization off
@@ -76,24 +98,36 @@ disassemble /r hesapla
 x/i $pc
 ```
 
-`break *hesapla` sets an address breakpoint at the symbol's first instruction. `break hesapla` may instead select a source location after the prologue. `start` loads the program's modules before the address breakpoint is created. ASLR stays enabled; addresses need not match between runs.
+`start` pauses in `main`. `break *hesapla` places a breakpoint at the function's first machine instruction; `continue` runs until that breakpoint. A breakpoint is a place where the debugger stops the program.
 
-At exact entry, `esi` should be 5 and the `int` at `$hedef_adresi` should be 7. `[rsp]` holds the return address; this simple call should have `rsp % 16 == 8`. `$donus_adresi` should point after the call in `main`. Do not apply this entry-state interpretation after the prologue. Argument passing for this signature follows the [System V AMD64 ABI](https://gitlab.com/x86-psABIs/x86-64-ABI).
+Read these three observations first:
 
-## 4. Follow the read, store, and return
+- `esi` should be **5**, the increment passed to the function.
+- `x/wd $hedef_adresi` should show **7**, the number before the write.
+- `x/i $pc` shows the instruction that will execute next.
 
-```gdb
+The values beginning with `$` that we create using `set` are debugger notes. `$hedef_adresi` saves the target address so we can keep inspecting it even if a register changes.
+
+The remaining commands also inspect the stack. At this exact entry point, `[rsp]` holds the return address and `rsp % 16` should be 8 for this call. Keep these as additional observations; you can complete the memory-write exercise before studying the ABI details in the [assembly guide](../rehberler/assembly-okuma.md).
+
+## 3. Watch the number change
+
+Still inside GDB, run this short block repeatedly:
+
+```text gdb
 stepi
 x/i $pc
 info registers rip rsp rbp
 x/wd $hedef_adresi
 ```
 
-Repeat these four commands until reaching the instruction that writes the target memory. `stepi` advances one machine instruction; source-level `step` advances toward the next source step. `nexti` can step over a call. See [GDB stepping](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Continuing-and-Stepping.html).
+Each `stepi` executes one machine instruction. After each step, look at the value shown by `x/wd $hedef_adresi`. It will stay 7 for several steps, then become 12.
 
-When you see `mov DWORD PTR [...], ...`, first verify that the address is `$hedef_adresi`; not every prologue store writes `sayi`. The target should read 7 before its store and 12 afterward. The saved GDB convenience variable retains the address even if `rdi` later changes. While still inside the function, continue with:
+**Your checkpoint:** identify the instruction that changes the target from **7 to 12**. The instruction shown by `$pc` after a step is the *next* instruction; the write is the one you just executed. Not every `mov` writes your target: some only save values on the stack. Compare the destination address with `$hedef_adresi`.
 
-```gdb
+Once you have seen 12, stop stepping while you are still inside `hesapla`. Then enter:
+
+```text gdb
 finish
 p/d (int)$eax
 p sayi
@@ -101,13 +135,23 @@ continue
 quit
 ```
 
-`finish` returns to the caller; expect 12 in `eax` and `sayi`. If you already stepped through `ret`, the innermost frame is now `main`; restart the experiment before using this sequence. `x/wd` displays four bytes as a signed decimal value; `x/gx` displays eight bytes in hexadecimal. Check units in the [GDB memory documentation](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Memory.html).
+`finish` runs until the current function returns to its caller. Both `eax` and `sayi` should now show 12. `continue` lets the program finish, and `quit` closes GDB.
 
-## 5. Change one variable to test the hypothesis
+If you accidentally step through the return instruction before using `finish`, restart from step 2. `finish` always applies to the currently selected function.
 
-Close the previous GDB session and open a fresh `gdb -q ./ilk-inceleme`. This time, change the second argument at the source breakpoint, where arguments are accessible:
+## 4. Change one input and predict the result
 
-```gdb
+The original call added 5 to 7. Predict what should happen if it adds 9 instead.
+
+Open a **fresh** session in the terminal:
+
+```bash
+gdb -q ./ilk-inceleme
+```
+
+Then enter this block inside GDB:
+
+```text gdb
 set pagination off
 set disable-randomization off
 break hesapla
@@ -122,13 +166,33 @@ continue
 quit
 ```
 
-Expected output becomes `value=16 result=16`. GDB assignment changes the running process, not the file on disk. Running `./ilk-inceleme` outside GDB again should produce the result with 12. The `set variable` syntax follows [GDB assignment](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Assignment.html). Keep this intervention separate from the unmodified execution record.
+This time the source-level breakpoint lets GDB find the argument by its name, `artis`. `set variable artis = 9` changes that argument in the running process. The expected program output is:
 
-## 6. Evidence and limits
+```text
+value=16 result=16
+```
 
-Save the disassembly, entry arguments, store address and width, target values before/after, and return value. Acceptance requires observing both 12 during normal execution and 16 after changing one argument, and explaining which store produces them.
+Run `./ilk-inceleme` once more outside GDB. It should return to `value=12 result=12`: the debugger changed one run, not the executable file.
 
-This experiment uses an unoptimized program with source and symbols available. Optimized values may disappear from the debugger; do not generalize `rbp`-relative local-variable patterns. GDB stepping affects timing, so this is not an independent performance measurement. Continue with [branches and pointers](dallanma-ve-pointer.md), then [debug information](debug-bilgisi.md) and [stripped ELF](../rehberler/stripped-elf.md).
+## Check your understanding
+
+You have completed the lab when you can explain:
+
+1. Why the first argument is an address rather than the number 7.
+2. Which instruction writes 12 through that address.
+3. Why changing the increment to 9 produces 16 in both output fields.
+
+Keep your compiler versions, disassembly, before/after values, and the instruction responsible for the write. Continue with [branches and pointers](dallanma-ve-pointer.md).
+
+## If something looks different
+
+**An x86 register is unknown:** recheck the target architecture. These register names do not transfer directly to ARM.
+
+**GDB cannot start the program:** a container or sandbox may restrict debugging (`ptrace`). An ordinary successful run does not prove that the debugger steps worked.
+
+**Addresses change between runs:** that is expected with ASLR. The exercise saves addresses from the current run instead of assuming fixed ones.
+
+**One source line produces several instructions:** that is normal. Likewise, optimized builds may hide variables or use a different layout. This lab uses `-O0`; debugger stepping is not a timing measurement. See [debug information](debug-bilgisi.md) and [stripped ELF](../rehberler/stripped-elf.md) when you are ready to explore those differences.
 
 ## Sources and supplementary study
 

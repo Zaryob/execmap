@@ -131,7 +131,7 @@ def verify(report, require_linux):
                 f'{binary_name}: missing disassembly')
         (OUT / f'{binary_name}.disassembly.txt').write_text(disasm.stdout)
 
-    first_blocks = blocks(pages['gdb-ilk-inceleme'], 'gdb')
+    first_blocks = blocks(pages['gdb-ilk-inceleme'], 'text gdb')
     require(len(first_blocks) == 4, 'first lab: GDB command blocks changed')
     baseline = first_blocks[0] + gdb_assert(
         '(int)$esi == 5 && *$hedef_adresi == 7 && (unsigned long)$rsp % 16 == 8')
@@ -148,7 +148,7 @@ def verify(report, require_linux):
               'value=16 result=16', report)
 
     # Keep the published watchpoint session, adding assertions before deletion.
-    branch_blocks = blocks(pages['dallanma-ve-pointer'], 'gdb')
+    branch_blocks = blocks(pages['dallanma-ve-pointer'], 'text gdb')
     require(len(branch_blocks) == 1, 'branch lab: GDB command blocks changed')
     watch = branch_blocks[0].replace('delete $bpnum\n',
                                     gdb_assert('*$hedef_adresi == 7') + 'delete $bpnum\n')

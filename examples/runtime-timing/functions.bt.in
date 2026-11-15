@@ -1,0 +1,16 @@
+uprobe:@BINARY@:perform_work
+/pid == $1/
+{
+    $now = nsecs(monotonic);
+    if (@last[tid]) { @entry_interval_ns = hist($now - @last[tid]); }
+    @last[tid] = $now;
+    @start[tid] = $now;
+    @calls = count();
+}
+uretprobe:@BINARY@:perform_work
+/pid == $1 && @start[tid]/
+{
+    @elapsed_ns = hist(nsecs(monotonic) - @start[tid]);
+    delete(@start[tid]);
+}
+END { clear(@last); clear(@start); }

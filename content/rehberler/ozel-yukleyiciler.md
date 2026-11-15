@@ -4,6 +4,9 @@ title: Custom loaders and in-memory execution
 
 # Custom loaders and in-memory execution
 
+> [!WARNING]
+> The `memfd_create`/`fexecve` function in section 2 executes whatever ELF bytes it is given, and the LIEF example in section 4 writes a modified executable. Use them only with programs you compiled yourself. Handle any sample you did not build inside an isolated virtual machine that you can discard, without access to your files or network.
+
 On Linux, `execve` replaces the current process image. It does not require a preceding `fork`, and it does not change the PID. `execveat` is another execution path. Watching only `sys_enter_execve` therefore does not cover every path; validate tool and rule coverage separately.
 
 Advanced malware, packers, and in-memory modules use **custom loaders** or **user-space exec** to reduce on-disk artifacts or avoid checks focused on `execve`. These techniques reproduce parts of the kernel's `load_elf_binary` work in user space, parsing and loading an ELF image in memory.
@@ -90,7 +93,7 @@ A new process is not required, so the PID may remain unchanged. Kernel events su
 
 The historical **ERESI/elfsh** toolkit explored adding segments and redirecting control flow without source code. Today, **[LIEF](https://github.com/lief-project/LIEF)** supports programmatic binary transformation in Python.
 
-This example uses the **LIEF 0.17.1 Python API** on a Linux x86-64 ELF with a section table. The new entry point only performs `exit(0)`; it is not a loader that resumes the original application. Its output was checked structurally, but Linux execution was not tested during this revision. Do not apply the example directly to a sectionless file.
+This example uses the **LIEF 0.17.1 Python API** on a Linux x86-64 ELF with a section table. The new entry point only performs `exit(0)`; it is not a loader that resumes the original application. Its output was checked structurally. On November 14, 2026, the transformed copy of a small dynamically linked test program also ran in a Debian bookworm amd64 container (emulated on an ARM host): the original exited with status 7 and the transformed file with 0. That is one fixture, not a general loadability result. Do not apply the example directly to a sectionless file.
 
 ```python
 import lief
@@ -110,7 +113,7 @@ binary.header.entrypoint = added.virtual_address
 binary.write("./ornek_yamali")
 ```
 
-Reparse the written file and verify that its entry point lies in an executable `PT_LOAD` range and that the added bytes are intact. No historical enum-transition date is assumed here; use the [LIEF ELF API](https://lief.re/doc/latest/formats/elf/python.html).
+Reparse the written file and verify that its entry point lies in an executable `PT_LOAD` range and that the added bytes are intact. No historical enum-transition date is assumed here. The [LIEF ELF API](https://lief.re/doc/latest/formats/elf/python.html) link follows the latest release, 1.0.0 when checked on November 14, 2026, rather than the 0.17.1 this example is pinned to. The block passed the same structural check with both versions; compare names against `lief.__version__` in your environment.
 
 ## 5. Investigating custom loaders in memory
 
@@ -131,6 +134,6 @@ Use C and strace in the [memory permissions laboratory](../laboratuvarlar/bellek
 ## Sources
 
 - [stelf-loader — David Buchanan (GitHub)](https://github.com/DavidBuchanan314/stelf-loader)
-- [LIEF: ELF Python API](https://lief.re/doc/latest/formats/elf/python.html)
+- [LIEF: ELF Python API](https://lief.re/doc/latest/formats/elf/python.html) (latest release; the example above is pinned to 0.17.1)
 - [memfd_create — Linux man-pages](https://man7.org/linux/man-pages/man2/memfd_create.2.html)
 - [Linux v6.12: ELF loading implementation](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c)

@@ -13,24 +13,113 @@ permissions:
   contents: read
 concurrency:
   group: execmap-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a pull-request run, but a main deployment is never cancelled midway.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
+  runtime-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install runtime laboratory tools
+        run: sudo apt-get update && sudo apt-get install -y g++ binutils gdb cmake
+      - name: Verify timing workload, trace analyzer and published GDB session
+        run: python3 scripts/verify-runtime-lab.py --require-linux --gdb --cmake
+      - name: Verify correlated events, C++ debugging and task counter sampling
+        run: python3 scripts/verify-debugging-labs.py --require-linux --gdb
+      - name: Runtime validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-validation
+          path: |
+            output/runtime-validation
+            output/debugging-validation
+          if-no-files-found: error
+          retention-days: 7
   assembly-labs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install native Linux lab tools
         run: sudo apt-get update && sudo apt-get install -y gcc binutils gdb
       - name: Verify published C examples and GDB sessions
         run: python3 scripts/verify-assembly-labs.py --require-linux-gdb
       - name: Assembly validation evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: assembly-validation
           path: output/assembly-validation
           if-no-files-found: error
+          retention-days: 7
+  examples:
+    # Needs only a C compiler with ASan/UBSan and the Python standard library.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the C toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc
+      - name: Verify the published parser and portable C examples
+        run: python3 scripts/verify-examples.py
+      - name: Example validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-validation
+          path: |
+            output/technical-validation/results.json
+            output/technical-validation/*.log
+          if-no-files-found: warn
+          retention-days: 7
+  tool-apis:
+    # LIEF and pyelftools come from PyPI at the versions the guides pin.
+    # The Frida and fq options are not used: they need separately downloaded binaries.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned Python packages
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install lief==0.17.1 pyelftools==0.32
+      - name: Verify the published LIEF and pyelftools examples
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" scripts/verify-tool-apis.py
+      - name: Tool API validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tool-api-validation
+          path: output/technical-validation/api-results.json
+          if-no-files-found: warn
+          retention-days: 7
+  linux-labs:
+    # Evidence only: this harness has so far passed on aarch64 Debian, not on an
+    # x86-64 hosted runner, so it does not gate deployment yet.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install native Linux lab tools
+        run: sudo apt-get update && sudo apt-get install -y gcc binutils gdb strace libcap2-bin
+      - name: Let the kernel write crash cores into the working directory
+        # The harness itself changes no host policy; this applies to the throwaway runner only.
+        run: sudo sysctl -w kernel.core_pattern=core
+      - name: Run the published Linux/glibc fragments
+        run: python3 scripts/verify-linux-labs.py --output "$RUNNER_TEMP/linux-validation"
+      - name: Linux validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-validation
+          path: |
+            ${{ runner.temp }}/linux-validation/report.json
+            ${{ runner.temp }}/linux-validation/*.log
+          if-no-files-found: warn
           retention-days: 7
   build:
     runs-on: ubuntu-latest
@@ -42,8 +131,8 @@ jobs:
     env:
       SITE_BASEURL: ${{ matrix.site_base }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -55,19 +144,19 @@ jobs:
       - run: npm run test:browser
       - name: Browser failure screenshots
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-failure-${{ strategy.job-index }}
           path: test-results
           if-no-files-found: ignore
           retention-days: 7
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: matrix.site_base == '/execmap'
         with:
           path: _site
   deploy:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy)
-    needs: [build, assembly-labs]
+    needs: [build, assembly-labs, examples, tool-apis, runtime-lab]
     permissions:
       pages: write
       id-token: write
@@ -79,4 +168,4 @@ jobs:
     steps:
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

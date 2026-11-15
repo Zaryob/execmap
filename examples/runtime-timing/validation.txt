@@ -1,0 +1,43 @@
+Runtime timing integration validation — November 14–15, 2026
+
+Executed on native aarch64 Linux in an Ubuntu 22.04 Docker container:
+  Linux 6.12.76-linuxkit; GCC 11.4.0; GDB 12.1; CMake 3.22.1.
+  python3 scripts/verify-runtime-lab.py --require-linux --gdb --cmake
+  (The local container run selected /evidence as its output directory.)
+
+Passed:
+  - C++11 build with -Wall -Wextra -Wpedantic; no compiler diagnostics.
+  - Defined, unmangled perform_work and run_cycle text symbols; ELF notes saved.
+  - Sleep: 20 invocations, 100 records, 19 same-TID entry intervals.
+  - Busy: 20 invocations, 100 records, 19 same-TID entry intervals.
+  - Period overrun: 5 invocations, 25 records, 4 entry intervals.
+  - 14 invalid command/output cases, including /dev/full write failure.
+  - Known synthetic durations, including a 0.2 ms caller-to-callee transition.
+  - Interleaved different-TID input without cross-thread interval pairing.
+  - 14 malformed, missing, duplicated or reordered trace cases rejected.
+  - Alternative CMake build and two-invocation run.
+  - Published GDB session: perform_work -> run_cycle -> main; normal exit;
+    all three invocations complete. Debugger timings are not baseline timings.
+
+Durations are retained in each run's report and CSVs. These are container
+observations, not acceptance thresholds or historical application results.
+The two clocks are sampled consecutively; small CPU/elapsed inversions are
+possible. Repetition under different load can change the numbers.
+
+Local evidence: output/runtime-validation-linux/report.json plus CSVs and logs.
+The report records input hashes, binary hash, versions and exact commands.
+CI runs the verifier on Ubuntu with --require-linux --gdb --cmake; its results
+are future evidence, not claimed as already observed on an x86-64 hosted runner.
+
+Site checks:
+  npm run check, with both /execmap and empty SITE_BASEURL.
+  Existing browser suite, with both prefixes: 13 passed, 1 intentional skip
+  per run (viewport sweep is already covered in the desktop project).
+  Separate browser inspection of the new lab and guide at mobile width;
+  download links retain /execmap, and lab downloads match tested source bytes.
+
+Not executed:
+  perf stat/record/sched, BPF compile/attach, remote GDB, sanitizers,
+  CPU affinity/policy/frequency changes, or lockup reproduction.
+The BPF examples target bpftrace 0.21 syntax and need separate kernel validation.
+Archive CSVs, private project history and old sanitizer claims were not imported.

@@ -1,0 +1,17 @@
+Experiment ID / date:
+Question / hypothesis:
+Host or VM / architecture / distro / kernel:
+Tool versions / capabilities / permission restrictions:
+Source revision / source SHA-256 / binary SHA-256 / build ID:
+Exact command / script / arguments:
+PID / TID / capture and report scope:
+Clock / unit / correlation method:
+Baseline / single changed variable:
+Raw files / hashes:
+Expected and observed invocation counts / duration / lost events:
+Observation:
+Supported inference:
+Unsupported inference:
+Limits / repeat result:
+Changed setting / original value / restoration:
+Status: measured / reported only / hypothesis / unavailable

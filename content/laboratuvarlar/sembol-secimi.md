@@ -4,15 +4,26 @@ title: Symbol selection and function interposition with LD_PRELOAD
 
 # Symbol selection and function interposition with LD_PRELOAD
 
-For a call in a dynamically linked ELF, the dynamic linker's lookup scope determines which shared object (`.so`) supplies the function definition.
+Make the same executable print **11**, then **22**, by changing which library supplies one function. You will build the executable once and leave it unchanged during that comparison.
 
-This laboratory creates two libraries defining the same function, `secim`. It uses `LD_PRELOAD` to redirect the call without changing the main executable's `DT_NEEDED` entries.
+A shared library is a file of functions that a program can load, usually ending in `.so` on Linux. **Function interposition** means supplying another definition of a function that a program calls. This lab makes that idea visible with a single return value.
 
-## 1. Prepare the source files
+## Before you start
 
-Create three small files: `liba.c`, `libb.c`, and `ana.c`.
+Use Linux with glibc, GCC, and GNU binutils. Run this as an ordinary, nonprivileged lab program. Special secure-execution rules can change how the loader treats environment variables.
 
-### First library: liba.c
+Create a working directory in the terminal:
+
+```bash
+mkdir -p ~/execmap-labs/symbol-selection
+cd ~/execmap-labs/symbol-selection
+```
+
+Keep running the commands from this directory. The example's library paths refer to the current directory.
+
+## 1. Create two answers to the same function call
+
+Save the first library as `liba.c`. Its `secim` function returns 11:
 
 ```c
 #include <stdio.h>
@@ -22,7 +33,7 @@ int secim(void) {
 }
 ```
 
-### Second library: libb.c, the interposer
+Save the replacement library as `libb.c`. It defines the same function name but returns 22:
 
 ```c
 #include <stdio.h>
@@ -32,7 +43,7 @@ int secim(void) {
 }
 ```
 
-### Main program: ana.c
+Save the main program as `ana.c`. It calls `secim` without defining that function itself:
 
 ```c
 #include <stdio.h>
@@ -46,73 +57,87 @@ int main(void) {
 }
 ```
 
-## 2. Build the libraries and executable
+**Before compiling:** confirm that you have three files, and that only the two library files define `secim`.
 
-Use position-independent code (`-fPIC`) for the shared libraries, then link the main program:
+## 2. Build the two libraries and one executable
+
+In the terminal:
 
 ```bash
-# 1. Build the libraries as shared objects (.so):
+# Build the two shared libraries:
 gcc -Wall -Wextra -fPIC -shared liba.c -o liba.so
 gcc -Wall -Wextra -fPIC -shared libb.c -o libb.so
 
-# 2. Link the main program against liba.so:
-# -Wl,-rpath,. adds the current directory to the runtime library search path
+# Build the executable, initially linked against liba:
 gcc -Wall -Wextra ana.c -L. -la -Wl,-rpath,. -o ana
 ```
 
-## 3. Run and compare
+`-shared` creates a shared library. `-fPIC` builds code suitable for loading at different addresses. For the executable, `-L.` lets the linker search this directory and `-la` selects `liba.so`. The `rpath` option lets the running example look here for its library too.
 
-### Normal execution
+You should now have `liba.so`, `libb.so`, and `ana` in addition to the source files.
 
-Run the main program directly:
+## 3. Run the ordinary version
 
 ```bash
 ./ana
 ```
 
-Output:
+Expected output:
 
 ```text
 secim() called, return value: 11
 ```
 
-The program loads `liba.so`, listed in `DT_NEEDED`, and calls its `secim` definition.
+The executable normally uses the `secim` definition from `liba.so`.
 
-### Interposition with LD_PRELOAD
-
-Preload `libb.so` using the environment variable:
+## 4. Preload the replacement
 
 ```bash
 LD_PRELOAD=./libb.so ./ana
 ```
 
-Output:
+Expected output:
 
 ```text
 secim() called, return value: 22
 ```
 
-In a normal glibc environment outside secure-execution mode, expected outputs are 11 and 22 respectively. Symbol selection changes without modifying the main executable's `DT_NEEDED` entry.
+The environment variable asks the dynamic linker to preload `libb.so`. In this ordinary glibc setup, its definition is selected for the call. The executable still has the same dependency on `liba.so`; we changed function selection without rebuilding `ana`.
 
-## 4. Trace dynamic linker lookup
+The variable assignment above applies to that command. Run `./ana` again normally: it should print 11 again.
 
-Capture a log on Linux/glibc outside secure-execution mode:
+**Your checkpoint:** predict the result before each run and explain which library supplies `secim`.
+
+## 5. Confirm the selected library in a loader log
+
+Run this optional investigation from the same directory:
 
 ```bash
 LD_DEBUG=symbols,bindings LD_PRELOAD=./libb.so ./ana >ana.stdout 2>ana.ld-debug
 grep -E 'symbol=secim|binding file.*secim' ana.ld-debug
 ```
 
-Linux/glibc validation on November 7, 2026 recorded both lookup and binding lines and confirmed results 11 normally and 22 with preload. Compare `secim` lookup lines with the binding of the `ana` reference to the `libb.so` definition in your recording. PID, paths, and version formatting may differ. `symbols` reports lookup and `bindings` reports binding; `grep "symbol=secim"` alone does not show the binding line. Do not assume every remaining library in scope is searched after a definition is found.
+`ana.stdout` contains the program's answer. `ana.ld-debug` contains the loader's much longer diagnostic output. The final command keeps the lines relevant to `secim`.
 
-## 5. AT_SECURE and -Bsymbolic limits
+Look for a binding of the reference in `ana` to the definition in `libb.so`. A lookup line says the loader is looking for a name; a binding line says which definition was chosen. PID and path formatting will vary. Do not expect every library to be searched after a suitable definition has already been found.
 
-1. **AT_SECURE**: A setuid bit alone does not guarantee secure execution on every run. In this mode, glibc restricts preload paths, ignoring those containing slashes, with a narrow exception for setuid objects in standard directories. See [startup and auxv](../rehberler/baslangic-ve-auxv.md). This laboratory does not change privileges.
-2. **`-Bsymbolic`**: Binds a shared object's internal references to its own global definitions where available. The call **from the main program**, `ana → secim`, is outside that scope. Even if `liba.so` is rebuilt with the option, the expected result of `LD_PRELOAD=./libb.so ./ana` here remains 22. An additional Linux/glibc fixture calling `secim` from inside `liba` produced 22 with default linking and 11 with `-Bsymbolic`; the main-program call still produced 22. To reproduce the internal-reference control, add another function in `liba` that calls `secim` ([GNU ld](https://sourceware.org/binutils/docs/ld/Options.html)).
+## If a run fails
 
-## Investigate further
+**`liba.so` cannot be found:** run from the directory containing `ana` and both `.so` files. This teaching example uses relative paths.
 
-Return to [dynamic linking](../rehberler/dinamik-baglama.md) for GOT/PLT mechanics. Complete the [debug information laboratory](debug-bilgisi.md) to separate and reconnect symbols for a stripped binary.
+**The preload file is ignored:** check its name, location, and architecture. This exercise assumes an ordinary glibc process outside secure-execution mode; do not test it by changing setuid bits or system privileges.
+
+**Your replacement still gives 11:** check that `libb.c` returns 22, rebuild `libb.so`, and confirm that the preload assignment is on the same command as `./ana`.
+
+## Further details
+
+`DT_NEEDED` records a shared-library dependency in the executable. Preloading a definition does not rewrite that record. See [dynamic linking](../rehberler/dinamik-baglama.md) for the lookup machinery.
+
+Secure execution (`AT_SECURE`) restricts preload behavior, including paths containing slashes. A setuid bit alone does not establish that a particular run entered this mode. The [startup guide](../rehberler/baslangic-ve-auxv.md) explains how to inspect it.
+
+The linker option `-Bsymbolic` concerns references **inside the shared object** being built. Our call comes from `ana`, outside `liba`, so adding that option to `liba.so` does not by itself make this call ignore the preload. A separate internal-call fixture in the Linux validation showed why those scopes matter.
+
+Linux/glibc validation on November 7, 2026 confirmed the two answers and the lookup/binding log. Those results do not replace your own run's evidence. Save the two program outputs and the relevant binding line, then continue with [debug information](debug-bilgisi.md).
 
 ## Sources
 

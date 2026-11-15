@@ -17,11 +17,11 @@ The scope is Linux x86-64, the System V AMD64 ABI, and the usual LP64 data model
 
 ## 2. Keep Intel and AT&T syntax distinct
 
-This series uses Intel syntax: select `-M intel` in GNU objdump and `set disassembly-flavor intel` in GDB. The [objdump documentation](https://sourceware.org/binutils/docs/binutils/objdump.html) describes that option.
+This guide and the laboratories use Intel syntax: select `-M intel` in GNU objdump and `set disassembly-flavor intel` in GDB. The series is not uniform, however. Fragments in the [startup](baslangic-ve-auxv.md), [dynamic linking](dinamik-baglama.md), [stripped ELF](stripped-elf.md), and [observer effects](analiz-aracinin-etkisi.md) guides are written in AT&T syntax, which is also what GNU objdump and GDB print by default on x86-64. Check the operand order before reading any listing. The [objdump documentation](https://sourceware.org/binutils/docs/binutils/objdump.html) describes that option.
 
 These lines describe the same operation; they are not a standalone program:
 
-```asm
+```text asm
 mov eax, DWORD PTR [rdi]   # Intel: destination, source
 movl (%rdi), %eax          # AT&T: source, destination
 ```
@@ -32,7 +32,7 @@ Both read four bytes at the address in `rdi`. In contrast, `mov rax, rdi` copies
 
 In Intel syntax, `[base + index * scale + displacement]` is an effective-address expression; hardware scales can be 1, 2, 4, or 8. This fragment is schematic: `rdi` represents the start of a valid `int` array and `rsi` an in-bounds index:
 
-```asm
+```x86asm asm
 lea rdx, [rdi + rsi*4]    # Compute the address of dizi[i]
 mov eax, DWORD PTR [rdx]  # Read the value of dizi[i]
 add eax, 3               # Increment the value

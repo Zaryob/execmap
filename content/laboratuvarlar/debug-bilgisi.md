@@ -4,13 +4,24 @@ title: Separating, stripping, and reconnecting debug information
 
 # Separating, stripping, and reconnecting debug information
 
-Distributions such as Red Hat, Ubuntu, and Debian commonly ship binaries with ordinary symbols and DWARF debug information removed to reduce distribution size. Separate debug files (`-dbgsym` / `debuginfo`) can be reconnected for bug reports and crash analysis.
+Remove a program's debugging information, then help GDB find it again in a separate file. The program will still add **10 + 20 = 30** throughout the experiment.
 
-This laboratory separates debug data with `objcopy`, strips the main file, and examines how `.gnu_debuglink` lets GDB reconnect the two.
+Debug information connects machine instructions to source lines, function names, and variables. It helps the debugger explain a running program; it is not the same thing as the instructions the CPU executes.
 
-## 1. Prepare the program
+## Before you start
 
-Create `hesap.c`, with a small loop and local variables:
+Use Linux, GCC, GNU binutils (`objcopy`, `strip`, and `readelf`), and GDB. Basic C is enough. The [first GDB lab](gdb-ilk-inceleme.md) is useful if the debugger prompt is new to you.
+
+Work only on this lab's executable. In a Linux terminal:
+
+```bash
+mkdir -p ~/execmap-labs/debug-information
+cd ~/execmap-labs/debug-information
+```
+
+## 1. Create and build the program
+
+Save this as `hesap.c`:
 
 ```c
 #include <stdio.h>
@@ -29,91 +40,123 @@ int main(void) {
 }
 ```
 
-## 2. Compile with debug information
-
-Use `-g3` to include rich DWARF information:
+Compile it with debugging information, keep a full copy, and run it:
 
 ```bash
 gcc -Wall -Wextra -O0 -g3 hesap.c -o hesap
-```
-
-Check file size and symbol status:
-
-```bash
+cp hesap hesap.full
+./hesap
 ls -lh hesap
 file hesap
 ```
 
-Expect `with debug_info, not stripped` in the `file` output.
+Expected program output:
 
-## 3. Separate debug data and strip the binary
+```text
+Total: 30
+```
 
-Use GNU binutils:
+`file` should describe the executable as having debug information and being `not stripped`. The backup `hesap.full` lets you compare with the original build later.
+
+## 2. Make a separate debug file
+
+Run these commands in order:
 
 ```bash
-# 1. Extract debug sections into a separate 'hesap.debug' file:
+# Save the debug information before removing it:
 objcopy --only-keep-debug hesap hesap.debug
 
-# 2. Remove debug data and ordinary symbols (dynamic linking entries may remain):
+# Remove debug information and unneeded ordinary symbols from the working file:
 strip --strip-debug --strip-unneeded hesap
 
-# 3. Embed the debug filename and CRC-32 in the main binary:
+# Add a note telling GDB which separate file to look for:
 objcopy --add-gnu-debuglink=hesap.debug hesap
 ```
 
-Inspect the result:
+You now have three files with different jobs:
 
-- `ls -lh hesap hesap.debug`: The `hesap` file should be smaller.
-- `file hesap`: It should now be reported as `stripped`.
-- `readelf -S hesap`: `.debug_*` sections should be gone and `.gnu_debuglink` present.
+- `hesap.full` is your unchanged original executable.
+- `hesap` is the stripped executable you will run and debug.
+- `hesap.debug` contains the separate debug information; do not run it as a program.
+
+Keep `hesap.debug` beside `hesap` for this exercise. The `.gnu_debuglink` note records its filename and a checksum that GDB can check when locating it.
+
+## 3. Check that behavior stayed the same
 
 ```bash
+./hesap.full
+./hesap
+ls -lh hesap.full hesap hesap.debug
+file hesap
+readelf -S hesap
 readelf -x .gnu_debuglink hesap
 ```
 
-The `.gnu_debuglink` layout is a NUL-terminated filename, 0–3 padding bytes to the next four-byte boundary, then a CRC-32 in the target ELF's byte order. `hesap.debug\0` occupies 12 bytes, so the CRC starts at `0x0c`, not `0x10`. Its value depends on the actual debug file. Linux aarch64 validation on November 7, 2026 recorded the GNU objcopy/readelf output and GDB source-line lookup. An altered debug file was rejected for CRC mismatch; Build-ID lookup was tested separately, including rejection of a different embedded identity. Once GDB finds the file through its name/path search, it checks the CRC too.
+Both programs should print `Total: 30`. The stripped `hesap` should be smaller than the original and reported as `stripped`. In `readelf -S`, look for `.gnu_debuglink`; the ordinary `.debug_*` sections should no longer be in this working executable.
 
-## 4. Verify automatic matching with GDB
+**Your checkpoint:** explain why losing source-level debugging information did not remove the addition that the program performs.
 
-Open the main binary:
+## 4. Let GDB reconnect the two files
+
+In the terminal, open the **stripped executable**, not the `.debug` file:
 
 ```bash
 gdb -q ./hesap
 ```
 
-If GDB finds the matching debug file, expect a message similar to this schematic example:
+A successful load may include messages like these; the path will be yours:
 
 ```text
 Reading symbols from ./hesap...
 Reading symbols from /path/to/hesap.debug...
 ```
 
-Even though the working binary is stripped, source lines and function names become available when matching debug data is loaded:
+At the `(gdb)` prompt, enter:
 
-```bash
-(gdb) break topla
-(gdb) run
-(gdb) list
-(gdb) print a
-(gdb) print b
+```text gdb
+break topla
+run
+list
+print a
+print b
 ```
 
-GDB's `.gnu_debuglink` search includes the executable directory, its `.debug` subdirectory, and paths under global debug directories corresponding to the executable's absolute directory. Verify actual loading in your session.
+A breakpoint pauses execution at a chosen place. Here GDB should recognize `topla`, show its source, and report `a = 10` and `b = 20`. Those are the concrete checks that the separate information was found and usable.
 
-## 5. Build-ID matching
+When finished inspecting, enter `continue` to let the program exit, then `quit` to close GDB.
 
-GDB reads the embedded Build-ID rather than hashing the entire executable with SHA-1 again. It looks for matching identity in separate debug data. For this **schematic 20-byte identifier**:
+## If GDB cannot find the source information
+
+**The `topla` breakpoint cannot be resolved:** check that `hesap.debug` is next to `hesap`, that you added the debuglink, and that both files came from the same build.
+
+**The debug file was changed or replaced:** its checksum may no longer match. Rebuild from step 1 rather than attaching an unrelated file.
+
+**You want to start again:** recompile from `hesap.c` or use the full backup as your starting executable. Do not try to recover removed debug sections by extracting them from the already stripped copy.
+
+**A different compiler or binutils was used:** record their versions and inspect the actual output. These commands target Linux ELF and GNU tools.
+
+## Optional: debuglink and Build-ID matching
+
+For this lab, keeping the named debug file beside the executable is enough. GDB can also search a `.debug` subdirectory and configured global debug directories; its full [search rules](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html) explain those locations.
+
+The `.gnu_debuglink` note contains a filename, padding to a four-byte boundary, and a CRC-32 checksum. For `hesap.debug`, the filename plus its terminating zero byte occupies 12 bytes, so the checksum starts at offset `0x0c`. You do not need to calculate the checksum by hand to complete the lab.
+
+### Matching by Build-ID
+
+A **Build-ID** is another identity GDB can use to locate separate information. For a schematic 20-byte ID, the search path can look like this:
 
 ```text
 ab1234567890abcdef1234567890abcdef123456
 /usr/lib/debug/.build-id/ab/1234567890abcdef1234567890abcdef123456.debug
 ```
 
-The first **two hexadecimal characters form one byte** (`ab`) and become the directory name; the remaining 38 characters become the filename. Build-ID is optional, with length/style depending on the linker. It does not guarantee matching debug contents on every server or represent the file's current checksum after modification. Check [GDB's search rules](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Separate-Debug-Files.html).
+The first two hexadecimal characters become the directory, and the rest become the filename. Build-ID formats are linker-dependent and optional. GDB reads the embedded identity; it does not recalculate the entire executable's SHA-1 to obtain it. The ID also does not promise that an altered file still has matching contents.
 
-## Investigate further
+## What to keep
 
-Read [stripped ELF](../rehberler/stripped-elf.md) for analysis without ordinary symbols. Use the [compiler differences laboratory](derleme-farklari.md) to investigate optimization's effect on code structure.
+Save the two `Total: 30` outputs, section inspection, and GDB's source/argument display. Linux aarch64 validation on November 7, 2026 also checked debuglink loading and rejection of a modified debug file, with Build-ID matching tested separately. These checks have distinct scopes.
+
+Continue with [stripped ELF](../rehberler/stripped-elf.md) for analysis when helpful names are absent, or [compiler differences](derleme-farklari.md) to see why optimized source can be harder to debug.
 
 ## Sources
 

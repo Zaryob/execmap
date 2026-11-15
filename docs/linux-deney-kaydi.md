@@ -37,4 +37,15 @@ This is one known AArch64 fixture. It does not validate unknown-packer OEP disco
 
 Burneye algorithm history and the Airs article's inaccessible content were not inferred or reintroduced. The x86-64 CRT fragment and Linux execution of the LIEF-transformed artifact also retain their earlier, separately recorded limits.
 
+## November 14, 2026 follow-up
+
+A review of the published pages prompted these bounded rechecks in Debian bookworm containers (GCC 12.2.0, GNU ld 2.40, GDB 13.1) on the same ARM host. The amd64 container was emulated; ptrace-based steps were run only in the native aarch64 container.
+
+- `python3 scripts/verify-linux-labs.py` passed all seven groups again on aarch64 with the current sources.
+- **gcore:** a `gcore` snapshot of a small running process was `ET_CORE` with 14 section headers (`note0` plus `load` sections). The core guide now limits its "no section header table" statement to kernel-written cores.
+- **Binding mode:** with default options neither architecture's link recorded an immediate-binding flag; `-Wl,-z,now` added `BIND_NOW` in `FLAGS` and `NOW` in `FLAGS_1`, and `-Wl,-z,lazy` neither. The x86-64 lazy `.plt` began with `push GOT+8(%rip)` and `jmp *GOT+16(%rip)`. Debian's default is not evidence for other distributions.
+- **PT_LOAD count:** the same small C program linked with four `PT_LOAD` segments on x86-64 and two on aarch64.
+- **LIEF artifact:** the published LIEF block, run with LIEF 0.17.1 against a dynamically linked x86-64 test program, produced a file that exited with status 0 in the emulated amd64 container (the original exited with 7). This closes the earlier "not Linux-executed" limit for one fixture only. `verify-tool-apis.py` still checks structure without executing the output, and passed with LIEF 0.17.1 and 1.0.0.
+- **bpftrace syntax:** the published scripts use `args.start`, which the bpftrace changelog introduces in 0.19.0. The 0.17.0 in this container predates it, and the harness's optional bpftrace probe uses the same newer form, so a future capture attempt needs a newer bpftrace or `args->start`. No bpftrace capture was attempted in this follow-up.
+
 Raw evidence is delivered outside the repository under the requested audit directory; generated cores and binaries are not part of the website or source distribution.

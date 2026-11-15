@@ -35,7 +35,7 @@ Binary comparison therefore needs **control-flow graph (CFG)** and **semantic** 
 | **Bytes** | `biodiff`, `vbindiff`, `cmp` | Raw byte sequences and file offsets | Useful for small fixed-location patches |
 | **Symbols** | `nm`, `readelf`, `bloaty` | Function and section sizes | Broad structural differences |
 | **Graphs / blocks** | `BinDiff`, `Ghidra Version Tracking` | Basic blocks, CFGs, call graphs | Narrows patch candidates; false matches remain possible |
-| **Microexecution** | `fnprint` | Input/output behavior and side effects | Investigating obfuscated code |
+| **Microexecution** | `fnprint` (experimental) | Input/output behavior and side effects | Investigating obfuscated code; a young project not audited here, so treat matches as leads |
 
 ## 2. How graph matching works
 
@@ -53,7 +53,7 @@ The result may include a similarity score (`0.0–1.0`) and confidence score. Th
 Use Ghidra's **Version Tracking** to compare two ELF files:
 
 1. **Analyze**: Import both binaries (`eski_surum` and `yeni_surum`) and complete automatic analysis.
-2. **Start a session**: Choose `File -> New Version Tracking Session` and select source and destination programs.
+2. **Start a session**: In the Version Tracking tool of Ghidra 11.4.2, choose `File -> New Session` and select source and destination programs in the wizard ([tool help](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.4.2_build/Ghidra/Features/VersionTracking/src/main/help/help/topics/VersionTrackingPlugin/VT_Tool.html)).
 3. **Run correlators**: Ghidra **11.4.2** help lists `Exact Symbol Name Match`, `Exact Function Instructions Match`, and `Duplicate Function Instructions Match`. The last produces 1:N/M:N candidates; it does not simply eliminate identical functions. Instruction correlators may mask operands, so a score of 1.0 is not byte equality. Confirm options in the installed version's help ([official correlator documentation](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.4.2_build/Ghidra/Features/VersionTracking/src/main/help/help/topics/VersionTrackingPlugin/VT_Correlators.html)).
 4. **Compare**: Open candidates in the version's function comparison view. Colors and menu names vary by version/theme; a highlighted block alone does not prove a security patch.
 
@@ -76,5 +76,5 @@ Run the [compiler differences laboratory](../laboratuvarlar/derleme-farklari.md)
 - [BioDiff — Hex/Binary Difference Tool (8051Enthusiast)](https://github.com/8051Enthusiast/biodiff)
 - [Ghidra — official project](https://github.com/NationalSecurityAgency/ghidra)
 - [BinDiff — Zynamics / Google](https://www.zynamics.com/bindiff.html)
-- [fnprint — Microexecution Function Identification (1rhino2)](https://github.com/1rhino2/fnprint)
+- [fnprint — Microexecution Function Identification (1rhino2)](https://github.com/1rhino2/fnprint): experimental; the repository was created in August 2026 and its code was not reviewed for this guide.
 - [Halvar Flake: Structural Comparison of Executable Objects — author's PDF](https://www.zynamics.com/downloads/dimva_paper2.pdf)

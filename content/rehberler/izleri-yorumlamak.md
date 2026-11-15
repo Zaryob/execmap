@@ -79,10 +79,12 @@ Document each claim, such as “this binary performs memory injection,” togeth
 
 ## Investigate further
 
+Use the [runtime latency guide](calisma-zamani-gecikmesi.md) to distinguish entry intervals from invocation duration and off-CPU time from runnable delay. The [timing laboratory](../laboratuvarlar/zamanlama-ve-bekleme.md) supplies a workload and record validator for repeating those comparisons.
+
 Return to the [memory permissions laboratory](../laboratuvarlar/bellek-izinleri.md) to test these distinctions using C and `mprotect`. Complete the [compiler differences laboratory](../laboratuvarlar/derleme-farklari.md) to see how optimization can mislead analysis.
 
 ## Sources
 
 - [Brendan Gregg: Systems Performance: Enterprise and the Cloud](https://www.brendangregg.com/systems-performance-2nd-edition-book.html)
 - [Linux man-pages: proc_pid_status](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html)
-- [NIST Special Publication 800-86: Guide to Integrating Forensic Techniques into Incident Response](https://csrc.nist.gov/publications/detail/sp/800-86/final)
+- [NIST Special Publication 800-86: Guide to Integrating Forensic Techniques into Incident Response](https://csrc.nist.gov/pubs/sp/800/86/final)

@@ -6,7 +6,7 @@ title: Validating ELF parsers and address calculations
 
 Binary analysis tools such as Ghidra, IDA, radare2, pyelftools, and LIEF make different assumptions about file validity. A tool's inability to open a file, or its report of a malformed field, does not mean that the Linux kernel will reject that file.
 
-This issue is discussed as **parser differentials** or within **LangSec** (language-theoretic security). The kernel and analysis tools validate different fields for different purposes; acceptance depends on the tool, architecture, and version. This does not by itself establish a performance tradeoff or imply that every analyzer assumes full ABI compliance.
+This issue is discussed as **parser differentials** or within **LangSec** (language-theoretic security). The kernel and analysis tools validate different fields for different purposes; acceptance depends on the tool, architecture, and version.
 
 ## 1. A bounds-checked ELF64 inventory example
 
@@ -181,5 +181,5 @@ After checking segment and offset calculations, continue with [linker layout](li
 - [pyelftools — GitHub (Eli Bendersky)](https://github.com/eliben/pyelftools)
 - [fq — jq for binary formats](https://github.com/wader/fq)
 - [Binsider — Terminal ELF Analyzer (Orhun Parmaksız)](https://github.com/orhun/binsider)
-- [The Cerberus ELF Interface (Phrack #61)](http://phrack.org/issues/61/8.html)
+- [The Cerberus ELF Interface (Phrack #61)](https://phrack.org/issues/61/8)
 - [Linux v6.12: ELF loader validation](https://github.com/torvalds/linux/blob/v6.12/fs/binfmt_elf.c)
