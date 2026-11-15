@@ -151,11 +151,24 @@ runtime CI job also requires this verifier. See the
 [report integration notes](docs/debugging-raporu-entegrasyonu.md) for the mapping
 from the supplied report to generalized guides and labs.
 
+## Additional runtime investigations
+
+The [runtime update integration](docs/runtime-update-entegrasyonu.md) adds
+[remote GDB and IDE setup](content/rehberler/gdb-uzak-hedef.md),
+[scheduler interpretation](content/rehberler/zamanlayici-izleri.md), and
+[tracing failure investigation](content/rehberler/izleme-donmalari.md).
+The new [function probe](content/laboratuvarlar/fonksiyon-problari.md) and
+[scheduler timeline](content/laboratuvarlar/zamanlayici-zaman-cizelgesi.md) labs
+show the probe code, raw records, pairing rules, and manual calculations.
+Queue API distinctions and a paired interval identity extend the existing flow.
+Kernel tracing and remote IDE execution require separate target validation;
+site checks do not establish those capabilities.
+
 ## Search and language contract
 
-The project registry retains stable `/execmap/` paths and the nine-laboratory
+The project registry retains stable `/execmap/` paths and the eleven-laboratory
 catalog. Registry display names use `title_en` when available. Both generated
-search indexes contain 30 reading pages, including the assembly guide and two
+search indexes contain 35 reading pages, including the assembly guide and two
 GDB laboratories. The suite adapter `search.json` publishes `type: "execmap/"`,
 `lang: "en"`, full text, and links using the selected build prefix. Consumers
 should preserve that content-language field. The local `search-index.json`

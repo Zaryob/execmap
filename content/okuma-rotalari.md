@@ -53,6 +53,8 @@ If you are new to assembly and debuggers, complete the three preparation steps a
 > - [Observing a memory permission change](laboratuvarlar/bellek-izinleri.md)
 > - [Examining compiler differences and optimization levels](laboratuvarlar/derleme-farklari.md)
 
+For a Linux target on another machine, continue with [remote GDB and IDE setup](rehberler/gdb-uzak-hedef.md). Match the executable and source before configuring CLion or VS Code.
+
 ---
 
 ## Route 03: observing runtime — profiling and the kernel
@@ -63,12 +65,16 @@ Examine a running process with passive and active techniques, investigate anti-a
 2. **[Execution analysis with perf](rehberler/perf-ile-yurutme.md)**: PMU hardware counters, 99 Hz sampling, and instruction-flow reconstruction with Intel PT.
 3. **[Runtime events with eBPF](rehberler/ebpf-ile-olaylar.md)**: Uprobes, kprobes, and ring buffers for observing process and kernel events.
 4. **[Runtime latency and scheduler delay](rehberler/calisma-zamani-gecikmesi.md)**: Distinguish call intervals, elapsed time, thread CPU time, and runnable waiting on one workload.
-5. **[Observer effects and anti-debugging](rehberler/analiz-aracinin-etkisi.md)**: `ptrace` checks, timing effects, and direct syscalls.
-6. **[Interpreting runtime traces](rehberler/izleri-yorumlamak.md)**: Observation, hypothesis, evidence, and correlation across telemetry sources.
+5. **[Scheduler timelines](rehberler/zamanlayici-izleri.md)**: Reconstruct sleeping and runnable intervals, inspect raw events, and account for perf version differences.
+6. **[Tracing failures and lockups](rehberler/izleme-donmalari.md)**: Preserve recovery evidence and narrow a failing tracing configuration.
+7. **[Observer effects and anti-debugging](rehberler/analiz-aracinin-etkisi.md)**: `ptrace` checks, timing effects, and direct syscalls.
+8. **[Interpreting runtime traces](rehberler/izleri-yorumlamak.md)**: Observation, hypothesis, evidence, and correlation across telemetry sources.
 
 Complete the **[timing and waiting laboratory](laboratuvarlar/zamanlama-ve-bekleme.md)** to compare sleep/busy modes, validate invocation identities, and repeat with a period shorter than the work. The milestone is explaining which measured interval changed without assuming a scheduler root cause.
 
 Then use **[six-point event correlation](laboratuvarlar/olay-akisini-eslestirme.md)** to follow one invocation across direct and queued calls. Complete **[thread counter sampling](laboratuvarlar/thread-sayaclari.md)** to measure a bounded task window without tracing. The milestone is distinguishing application queueing from runnable waiting and unavailable counters from measured zero.
+
+Then write and inspect [function probes](laboratuvarlar/fonksiyon-problari.md), checking entry/return counts and the first missing entry interval. Finish with [a scheduler timeline](laboratuvarlar/zamanlayici-zaman-cizelgesi.md), manually pairing switch-out, wakeup, and switch-in before comparing perf reports.
 
 ---
 

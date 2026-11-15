@@ -10,6 +10,8 @@ The [timing laboratory](../laboratuvarlar/zamanlama-ve-bekleme.md) provides a st
 
 Begin with [process and thread state](process-thread-ve-zamanlayici.md) if PID/TID, runnable waiting, or scheduler counters are unfamiliar. Extend the experiment with [six-point event correlation](../laboratuvarlar/olay-akisini-eslestirme.md) to distinguish an upstream gap from waiting inside a caller, including a queued thread handoff. The [C++ GDB guide](cpp-cagri-zinciri.md) checks member calls and object state on that same generic workload.
 
+For a complete remote setup, use [remote GDB and IDE configuration](gdb-uzak-hedef.md). After the baseline, continue with the command-by-command [function probe lab](../laboratuvarlar/fonksiyon-problari.md) and [scheduler timeline lab](../laboratuvarlar/zamanlayici-zaman-cizelgesi.md). The [scheduler interpretation guide](zamanlayici-izleri.md) covers raw transitions and analyzer versions; [tracing failure investigation](izleme-donmalari.md) expands recovery and isolation.
+
 ## 1. Define the interval before diagnosing it
 
 Entry interval compares two successive entries within a stated scope. Elapsed duration compares entry and exit for one invocation. Thread CPU time measures service actually consumed by the thread. Off-CPU time spans a switch-out and the following switch-in, including sleep and potentially runnable waiting. Scheduler delay concerns the part spent runnable before running. Caller-to-callee transition uses the caller's before-call marker and the matching callee entry.
@@ -122,6 +124,19 @@ sudo perf sched map -i results/sched.data
 Use `perf sched timehist -i results/sched.data --tid TID` with the actual printed TID. Capture is system-wide; reporting is filtered afterward. A process-filtered `sched_switch` capture can omit target switch-ins occurring in another task's context.
 
 In `timehist`, wait time spans switch-out to switch-in, scheduling delay spans runnable to running, and run time describes CPU execution. A sleeping task can have large wait time and small scheduling delay. Inspect the relevant TID and interval before attributing an extreme maximum to starvation. Preserve capture warnings and lost-event counts; missing wakeups and capture edges can invalidate interval reconstruction.
+
+### Add a short syscall view when the question needs it
+
+On a Linux lab host with strace, launch a separate finite run:
+
+```bash
+strace -f -ttt -T -e trace=clock_nanosleep,nanosleep,futex,read,write -o results/syscalls.txt -- ./build/timing_lab sleep 10 100 results/syscall-run.csv
+less results/syscalls.txt
+```
+
+`-f` follows child/thread execution, `-o` separates the trace from application output, and `-e trace=` restricts the syscall set. `-ttt` prints Unix-epoch timestamps; `-T` prints the observed entry/return duration of each syscall. Neither is thread CPU service. The tracer perturbs execution, so keep this run separate from the untraced baseline. Do not directly subtract these epoch values from application steady-clock or BPF monotonic values.
+
+Inspect the actual sleep syscall and its arguments/return value before interpreting the duration. A userspace mutex or queue can operate without a futex syscall when uncontended; the absence of a futex row does not prove that no C++ synchronization happened. A libc call view from ltrace has different boundaries and coverage from syscalls and cannot establish in-process queue depth. The [strace manual](https://man7.org/linux/man-pages/man1/strace.1.html) defines these tracing and timestamp options.
 
 ## 6. Record system context before changing it
 

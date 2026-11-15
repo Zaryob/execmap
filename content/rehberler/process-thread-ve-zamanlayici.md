@@ -48,7 +48,7 @@ Per-task `schedstat` exposes three counters: CPU execution nanoseconds, runqueue
 
 Read `/proc/sys/kernel/sched_schedstats` when available. Kernel configuration and whether statistics were enabled affect interpretation, especially a zero runqueue-wait value. Disabled or unknown collection does not establish zero waiting. Reading the flag at two endpoints also cannot exclude another process toggling it during the window.
 
-The [thread counter laboratory](../laboratuvarlar/thread-sayaclari.md) supplies a reader that checks PID/TID start-time identities, retains raw samples, rejects counter decreases, and reports unsupported wait accounting explicitly. Start times have tick resolution and procfs reads are not atomic; this is a bounded diagnostic check, not a race-free process handle.
+The [thread counter laboratory](../laboratuvarlar/thread-sayaclari.md) teaches direct file reads, PID/TID start-time checks, raw sample retention, and integer subtraction. Its optional reader also rejects counter decreases and reports unsupported wait accounting explicitly. Start times have tick resolution and procfs reads are not atomic; this is a bounded diagnostic check, not a race-free process handle.
 
 An increase in wait counters describes aggregate runnable waiting in the window. It does not give a per-invocation maximum or say which application statement was delayed. Align a longer observation with sequence-tagged application records, then use scheduler events when the question requires individual transitions.
 
@@ -81,11 +81,25 @@ A policy may cover multiple CPUs. Frequency fields commonly use kHz; `scaling_cu
 
 PSI measures contention-related stalls, not CPU utilization. Restricted affinity or cgroups can leave particular tasks waiting while other CPUs are idle. Preserve the same window, CPU set, cgroup, and workload when comparing these observations. System-wide averages from unrelated windows cannot establish causation.
 
+## 6. Identify the queue before inspecting its depth
+
+A word such as “queue” does not identify an operating-system API. First inspect the enqueue/dequeue implementation and the identity it uses:
+
+- **System V messages** use `msgsnd`/`msgrcv`. `ipcs -q` lists queues visible in the current IPC namespace. For a known queue, `msgctl(IPC_STAT)` exposes `msg_qnum` (messages), `msg_cbytes` (current bytes), and `msg_qbytes` (byte limit). Count and capacity have different units.
+- **POSIX message queues** use `mq_send`/`mq_receive`. `mq_getattr` exposes `mq_curmsgs`, `mq_maxmsg`, and `mq_msgsize`; a mounted `/dev/mqueue` exposes named queues. `ipcs -q` does not inspect these queues.
+- **In-process queues** depend on their implementation and synchronization. The event lab's vector queue uses `available - read` as its pending item count, observed while holding the queue mutex. It is not a System V or POSIX message queue.
+- **Socket buffers** have separate transport and accounting rules. A socket byte count cannot be treated as an application message count without knowing framing.
+
+An instantaneous depth does not reveal how long a particular item waited. Carry the same sequence ID through enqueue and dequeue, record both timestamps with a known clock relationship, and state whether each marker is before or after the operation. A marker before taking a mutex includes lock acquisition time too. The [event correlation lab](../laboratuvarlar/olay-akisini-eslestirme.md) makes these boundaries visible; its receipt-to-dispatch interval contains more than pure queue residence.
+
 ## Continue the investigation
 
 Use the [runtime latency guide](calisma-zamani-gecikmesi.md) for perf and BPF capture, clock alignment, and tracing-instability evidence. Use [C++ call-chain debugging](cpp-cagri-zinciri.md) to determine which synchronous function and object are active at a stop.
 
 ## Sources
+
+- [msgctl](https://man7.org/linux/man-pages/man2/msgctl.2.html) defines System V queue count and byte fields.
+- [mq_getattr](https://man7.org/linux/man-pages/man3/mq_getattr.3.html) defines POSIX queue attributes.
 
 - [Linux proc_pid_task](https://man7.org/linux/man-pages/man5/proc_pid_task.5.html) documents the task directories.
 - [Linux proc_pid_stat](https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html) defines states and start-time identity fields.

@@ -219,6 +219,27 @@ printf 'sum of its three stages: %s ns\n' "$((LAB_TRANSITION_NS + LAB_WORK_NS + 
 
 Those last two integers should agree: they use the same bookends. This arithmetic check helps catch a mistaken pairing. Keep integer nanoseconds for the calculation; divide the final difference by one million only when displaying milliseconds.
 
+### Check two successive entry intervals against their transitions
+
+Use the first two sequences from the same `direct-first` run. The variables above still hold sequence 1's `BEFORE_CALL` and `WORK_ENTER`. Extract sequence 2's matching markers:
+
+```bash
+awk -F, '$1 == "direct-first" && $3 == 2 && $5 == "BEFORE_CALL" { print $2 }' results/direct.csv > results/before-2.ns
+awk -F, '$1 == "direct-first" && $3 == 2 && $5 == "WORK_ENTER" { print $2 }' results/direct.csv > results/work-enter-2.ns
+cat results/before-2.ns results/work-enter-2.ns
+read -r LAB_BEFORE_2_NS < results/before-2.ns
+read -r LAB_WORK_ENTER_2_NS < results/work-enter-2.ns
+LAB_CALLER_GAP_NS=$((LAB_BEFORE_2_NS - LAB_BEFORE_NS))
+LAB_WORKER_GAP_NS=$((LAB_WORK_ENTER_2_NS - LAB_WORK_ENTER_NS))
+LAB_TRANSITION_2_NS=$((LAB_WORK_ENTER_2_NS - LAB_BEFORE_2_NS))
+printf 'worker gap minus caller gap: %s ns\n' "$((LAB_WORKER_GAP_NS - LAB_CALLER_GAP_NS))"
+printf 'transition 2 minus transition 1: %s ns\n' "$((LAB_TRANSITION_2_NS - LAB_TRANSITION_NS))"
+```
+
+Both extracted files must contain one integer. The two printed differences must agree exactly: if caller and worker entries are `C1`, `C2`, `W1`, and `W2`, then `(W2-W1)-(C2-C1) = (W2-C2)-(W1-C1)`. This is an identity from the same four timestamps, not a claim that scheduling is regular.
+
+If both paired transitions are small, they cannot explain an arbitrarily large disagreement between the two entry intervals. Check the run, sequence, TID, clock, missing rows, and event definitions before attributing the disagreement to “different metrics.” With queue handoff, preserve the same sequence across threads and confirm ordering rather than pairing whichever entries happen to be adjacent.
+
 ## 5. Put a known wait before worker entry
 
 Record a new run:

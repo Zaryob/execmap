@@ -17,8 +17,8 @@ async function walk(dir) {
 const htmlFiles = (await walk(root)).filter(file => file.endsWith('.html'));
 
 test('all content is published with one title, a main landmark and navigation', async () => {
-  assert.equal(pages.length, 31);
-  assert.equal(htmlFiles.length, 35);
+  assert.equal(pages.length, 36);
+  assert.equal(htmlFiles.length, 40);
   for (const file of htmlFiles) {
     const { document } = parseHTML(await readFile(file, 'utf8'));
     assert.equal(document.documentElement.lang, 'en', file);
@@ -75,7 +75,7 @@ test('every internal page, fragment, download, script and stylesheet exists', as
 
 test('runtime downloads match the tested sources and include no local outputs', async () => {
   const directory = path.join(root, 'labs/runtime-timing');
-  const files = ['CMakeLists.txt', 'analyze.py', 'evidence.txt', 'functions.bt.in', 'offcpu.bt', 'timing_lab.cpp', 'validation.txt'];
+  const files = ['CMakeLists.txt', 'analyze.py', 'evidence.txt', 'functions-child.bt.in', 'functions.bt.in', 'offcpu.bt', 'timing_lab.cpp', 'validation.txt'];
   assert.deepEqual((await readdir(directory)).sort(), files);
   for (const file of files) {
     assert.deepEqual(await readFile(path.join(directory, file)),
@@ -98,8 +98,8 @@ test('runtime downloads match the tested sources and include no local outputs', 
   assert.ok(document.querySelector('a[href$="/thread-sayaclari.html"]').textContent.includes('Bash / Linux'));
 });
 
-test('all 30 reading pages are searchable, including code and cited resources', () => {
-  assert.equal(index.length, 30);
+test('all 35 reading pages are searchable, including code and cited resources', () => {
+  assert.equal(index.length, 35);
   for (const page of pages.filter(page => page.id !== 'index')) {
     const hit = index.find(entry => entry.title === page.title);
     assert.ok(hit, page.id);

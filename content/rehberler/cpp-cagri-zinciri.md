@@ -70,6 +70,8 @@ With an already running process, use its exact executable and `gdb ./build/event
 
 For a remote target, preserve executable/debug identity, target architecture support, and source-path mapping. The [runtime latency guide](calisma-zamani-gecikmesi.md#2-use-gdb-for-identity-and-call-relationships) provides an SSH-stdio gdbserver example. `set substitute-path` changes source lookup; it cannot repair a mismatched executable. IDE frontends have the same identity and mapping requirements. A breakpoint resolving to the intended function and source line is the check, rather than a successful connection alone.
 
+For the full target/workstation workflow, matching artifacts, source and library paths, and CLion/VS Code settings, continue with [remote GDB setup](gdb-uzak-hedef.md).
+
 ## Sources
 
 - [GDB C++ expressions](https://sourceware.org/gdb/current/onlinedocs/gdb.html/C-Plus-Plus-Expressions.html) documents member access and `this`.

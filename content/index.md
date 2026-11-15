@@ -35,6 +35,8 @@ Learn with small experiments you can compile and run in your own terminal:
 - **[Timing and waiting](laboratuvarlar/zamanlama-ve-bekleme.md)**: Compare elapsed and thread CPU time in a C++ workload, validate correlated calls, and investigate period overruns.
 - **[Event correlation](laboratuvarlar/olay-akisini-eslestirme.md)**: Follow six boundaries through direct and queued calls; localize a controlled source or caller wait.
 - **[Thread counters](laboratuvarlar/thread-sayaclari.md)**: Read procfs counter deltas with task identity and accounting checks.
+- **[Function probes](laboratuvarlar/fonksiyon-problari.md)**: Write entry and return probes, then check pairing, clocks, and sample counts.
+- **[Scheduler timelines](laboratuvarlar/zamanlayici-zaman-cizelgesi.md)**: Inspect raw task transitions and calculate blocked and runnable intervals yourself.
 
 ---
 

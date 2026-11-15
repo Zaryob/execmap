@@ -153,11 +153,24 @@ CI işi bu doğrulayıcıyı da şart koşar. Sağlanan rapordan genelleştirilm
 laboratuvarlara eşleme için [rapor bütünleştirme notlarına](docs/debugging-raporu-entegrasyonu.md)
 bakın.
 
+## Ek çalışma zamanı incelemeleri
+
+[Yeni arşivin bütünleştirme notları](docs/runtime-update-entegrasyonu.md),
+[uzak GDB ve IDE ayarlarını](content/rehberler/gdb-uzak-hedef.md),
+[zamanlayıcı izlerinin yorumunu](content/rehberler/zamanlayici-izleri.md) ve
+[izleme sırasında donma incelemesini](content/rehberler/izleme-donmalari.md) açıklar.
+[Fonksiyon probları](content/laboratuvarlar/fonksiyon-problari.md) ve
+[zamanlayıcı zaman çizelgesi](content/laboratuvarlar/zamanlayici-zaman-cizelgesi.md)
+laboratuvarları prob kodunu, ham kayıtları, eşleştirmeyi ve elle çıkarma işlemlerini
+adım adım gösterir. Kuyruk API ayrımları ve eşleştirilmiş aralıkların aritmetik
+kontrolü mevcut akışı tamamlar. Kernel izleme ve uzak IDE oturumları hedefte ayrıca
+doğrulanmalıdır; site testleri bu yeteneklerin çalıştığını kanıtlamaz.
+
 ## Arama ve dil sözleşmesi
 
-Proje kaydı kararlı `/execmap/` yollarını ve dokuz laboratuvarlık kataloğu korur.
+Proje kaydı kararlı `/execmap/` yollarını ve on bir laboratuvarlık kataloğu korur.
 Kayıttaki görünen adlar, varsa `title_en` değerini kullanır. Üretilen iki arama dizini de
-assembly rehberi ve iki GDB laboratuvarı dahil 30 okuma sayfası içerir. Ortak
+assembly rehberi ve iki GDB laboratuvarı dahil 35 okuma sayfası içerir. Ortak
 bağdaştırıcı `search.json`; `type: "execmap/"`, `lang: "en"`, tam metin ve seçilen
 derleme önekini kullanan bağlantılar yayımlar. Tüketiciler bu içerik dili alanını
 korumalıdır. Yerel `search-index.json`, ifade ve kod sorgularını sıralamak için kod ve

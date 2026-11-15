@@ -149,7 +149,7 @@ await cp(path.join(root, 'NOTICE.md'), path.join(out, 'NOTICE.md'));
 // Publish only the tested lab inputs, never local builds or measurement files.
 const runtimeDownloads = path.join(out, 'labs/runtime-timing');
 await mkdir(runtimeDownloads, { recursive: true });
-for (const name of ['timing_lab.cpp', 'analyze.py', 'CMakeLists.txt', 'functions.bt.in', 'offcpu.bt', 'evidence.txt', 'validation.txt']) {
+for (const name of ['timing_lab.cpp', 'analyze.py', 'CMakeLists.txt', 'functions.bt.in', 'functions-child.bt.in', 'offcpu.bt', 'evidence.txt', 'validation.txt']) {
   await cp(path.join(root, 'examples/runtime-timing', name), path.join(runtimeDownloads, name));
 }
 for (const [directory, files] of [

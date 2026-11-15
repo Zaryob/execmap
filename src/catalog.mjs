@@ -1,10 +1,15 @@
 export const sections = [
   { name: 'ELF and loading', key: 'elf', label: '01', pages: ['elf-dosyadan-bellege', 'elf-parser-ve-adresler', 'linker-duzeni', 'baslangic-ve-auxv', 'dinamik-baglama'] },
-  { name: 'Reverse engineering', key: 're', label: '02', pages: ['assembly-okuma', 'cpp-cagri-zinciri', 'stripped-elf', 'ikili-fark-analizi', 'ozel-yukleyiciler', 'paketli-elf', 'core-ve-snapshot'] },
-  { name: 'Runtime', key: 'tracing', label: '03', pages: ['process-thread-ve-zamanlayici', 'perf-ile-yurutme', 'ebpf-ile-olaylar', 'calisma-zamani-gecikmesi', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
+  { name: 'Reverse engineering', key: 're', label: '02', pages: ['assembly-okuma', 'cpp-cagri-zinciri', 'gdb-uzak-hedef', 'stripped-elf', 'ikili-fark-analizi', 'ozel-yukleyiciler', 'paketli-elf', 'core-ve-snapshot'] },
+  { name: 'Runtime', key: 'tracing', label: '03', pages: ['process-thread-ve-zamanlayici', 'perf-ile-yurutme', 'ebpf-ile-olaylar', 'calisma-zamani-gecikmesi', 'zamanlayici-izleri', 'izleme-donmalari', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
 ];
-export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari', 'zamanlama-ve-bekleme', 'olay-akisini-eslestirme', 'thread-sayaclari'];
+export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari', 'zamanlama-ve-bekleme', 'olay-akisini-eslestirme', 'thread-sayaclari', 'fonksiyon-problari', 'zamanlayici-zaman-cizelgesi'];
 export const summaries = {
+  'gdb-uzak-hedef': 'Connect remote GDB with matching artifacts, source mappings, and CLion or VS Code settings.',
+  'zamanlayici-izleri': 'Reconstruct blocked and runnable intervals from scheduler events and check perf analyzer behavior.',
+  'izleme-donmalari': 'Preserve recovery evidence and isolate the tracing mechanism involved in an unresponsive system.',
+  'fonksiyon-problari': 'Write an entry counter and entry/return probes, then explain clocks, pairing, and histogram counts.',
+  'zamanlayici-zaman-cizelgesi': 'Inspect scheduler tracepoints, pair raw task transitions, and calculate blocked and runnable time.',
   'assembly-okuma': 'Prepare to read disassembly with registers, addressing, the stack, and System V calling conventions.',
   'gdb-ilk-inceleme': 'Pause a small C program, watch a number change in memory, then change one argument yourself.',
   'dallanma-ve-pointer': 'Compare two builds of the same condition and catch the moment a pointer target changes.',
@@ -36,5 +41,5 @@ export const summaries = {
 export const routes = [
   { n: '01', title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.', pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/linker-duzeni', 'rehberler/baslangic-ve-auxv', 'rehberler/dinamik-baglama'], code: 'readelf -lW ./ornek' },
   { n: '02', title: 'From names to behavior', text: 'Understand stripped files and meaningful differences between versions.', pages: ['rehberler/cpp-cagri-zinciri', 'rehberler/stripped-elf', 'rehberler/ikili-fark-analizi', 'rehberler/ozel-yukleyiciler', 'rehberler/paketli-elf', 'rehberler/core-ve-snapshot'], code: 'objdump -d ./ornek' },
-  { n: '03', title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.', pages: ['rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/ebpf-ile-olaylar', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
+  { n: '03', title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.', pages: ['rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/ebpf-ile-olaylar', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/zamanlayici-izleri', 'rehberler/izleme-donmalari', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
 ];
