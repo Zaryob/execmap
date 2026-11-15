@@ -248,3 +248,4 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .prose .admonition-title { font-weight: 600; margin: 0 0 8px; }
 .prose .admonition > :last-child { margin-bottom: 0; }
 .mobile-toc .toc-details:not([open]) summary { padding-bottom: 0; }
+.home-intro .home-prompt { margin: 0 0 22px; }
