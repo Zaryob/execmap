@@ -22,7 +22,7 @@ test('reopening search with the keyboard preserves its original focus target', a
   await page.goto('./');
   const trigger = testInfo.project.name === 'mobile'
     ? page.getByRole('button', { name: 'Search this site' })
-    : page.getByRole('button', { name: 'Search /', exact: true });
+    : page.getByRole('button', { name: 'Search Execmap', exact: true });
   await trigger.click();
   await page.keyboard.press('ControlOrMeta+k');
   await page.keyboard.press('Escape');
