@@ -1,5 +1,7 @@
 # execmap
 
+**English** · [Türkçe](README.tr.md)
+
 A source-backed study of Linux ELF loading, binary analysis, and runtime observation, published as an English technical reference with practical C, C++, and Python laboratories.
 
 [Read the site](https://zaryob.github.io/execmap/) · [Research method](content/kaynaklar.md) · [Literature and tools](content/kaynak-kutuphanesi.md)
