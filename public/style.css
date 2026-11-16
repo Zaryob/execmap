@@ -130,7 +130,11 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .prose .console-code { margin: 0 0 26px; }
 .prose .console-code pre { padding-block: 18px; }
 .code-language { display: flex; align-items: center; min-height: 44px; border: 1px solid var(--line); border-bottom: 0; padding: 5px 100px 5px 14px; background: var(--surface); color: var(--muted); font: var(--text-xs)/1.8 var(--font-mono); margin: 24px 0 0; }
-.execmap-site .console-copy { font-size: var(--text-xs) !important; top: -40px; right: 8px; min-height: 36px !important; padding: 6px 10px !important; }
+.execmap-site .console-copy { font-size: var(--text-xs) !important; line-height: 1.5; top: calc(-5px - max(var(--execmap-code-action), 14px + 1.5em)); right: 8px; min-height: var(--execmap-code-action) !important; padding: 6px 10px !important; }
+/* The wrap toggle in the code header matches Copy's box and sits on the same bottom line, so the two share a centre. */
+.execmap-site { --execmap-code-action: 36px; }
+.execmap-site .code-language > .console-code-toggle { align-self: flex-end; min-height: var(--execmap-code-action); padding: 6px 10px; line-height: 1.5; }
+@media (pointer: coarse), (max-width: 560px) { .execmap-site { --execmap-code-action: 44px; } }
 .execmap-site .prose .console-code pre { padding-inline-end: 18px; }
 .prose .heading-anchor { text-decoration: none; padding-left: 9px; color: var(--muted); opacity: 0; font-size: .8em; }
 .prose :is(h2,h3):is(:hover,:focus-within) .heading-anchor { opacity: 1; }
@@ -250,7 +254,7 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .reading-layout { padding-inline: 20px; }.reading-main { padding-top: 22px; }
   .article-header h1 { font-size: 1.65rem; }.article-lead { font-size: 1.0625rem; }.article-meta { gap: 8px 16px; }.article-meta a { margin-left: 0; }
   .prose { font-size: var(--text-prose); }.prose h2 { font-size: 1.2rem; }.prose .heading-anchor { opacity: 1; }
-  .mobile-toc .toc-details ol { columns: 1; }.prose pre { font-size: var(--text-xs); }.execmap-site .console-copy { top: -40px; right: 8px; }
+  .mobile-toc .toc-details ol { columns: 1; }.prose pre { font-size: var(--text-xs); }.execmap-site .console-copy { right: 8px; }
   .page-neighbors { gap: 18px; }.page-neighbors a { font-size: var(--text-xs); }
   .legal-main { padding-top: 32px; }
 }
