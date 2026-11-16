@@ -94,7 +94,7 @@ function header(current) {
     </div>
     <div class="console-header-actions"><button type="button" class="console-search-compact" data-site-search aria-label="Search this site">${icon('search')}</button><button type="button" class="console-menu" data-console-menu aria-label="Open menu" aria-controls="console-navigation" aria-expanded="false">${icon('menu')}</button></div>
     <nav class="console-nav" id="console-navigation" aria-label="Main navigation">${nav.map(([id, label]) => `<a href="${url(id)}"${(selected === id.split('/')[0] || selected === id) ? ' aria-current="page"' : ''}>${e(label)}</a>`).join('')}
-      <div class="console-tools"><button type="button" class="console-search-open" data-site-search aria-label="Search Execmap" aria-haspopup="dialog">${icon('search', 16)}<span>Search Execmap</span><kbd>/</kbd></button><label class="console-theme"><span class="console-sr-only">Theme</span><select data-console-theme aria-label="Color theme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label></div>
+      <div class="console-tools"><button type="button" class="console-search-open" data-site-search aria-label="Search Execmap" aria-haspopup="dialog">${icon('search', 16)}<span>Search Execmap</span><kbd>/</kbd></button><label class="console-theme"><span>Theme</span><select data-console-theme aria-label="Color theme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label></div>
     </nav>
   </div></header>`;
 }
