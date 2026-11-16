@@ -31,8 +31,13 @@ test('reopening search with the keyboard preserves its original focus target', a
 });
 
 test('topic and text filters work together and reset the empty state', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
   await page.goto('./');
+  await expect(page.getByRole('searchbox', { name: 'Filter guides' })).toHaveCount(0);
+  await page.goto('rehberler/index.html');
   const all = await page.locator('[data-catalog-item]:visible').count();
+  expect(all).toBe(24);
   await page.getByRole('button', { name: 'Runtime', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Filter guides' }).fill('eBPF');
   await expect(page.locator('[data-catalog-item]:visible')).toHaveCount(1);
@@ -42,6 +47,7 @@ test('topic and text filters work together and reset the empty state', async ({ 
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await expect(page.locator('[data-catalog-item]:visible')).toHaveCount(all);
   await expect(page.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(errors).toEqual([]);
 });
 
 test('theme choice survives navigation and the compact menu is usable', async ({ page }, testInfo) => {

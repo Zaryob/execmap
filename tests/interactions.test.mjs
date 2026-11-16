@@ -5,12 +5,13 @@ import { parseHTML } from 'linkedom';
 import { initCatalog, initSearch, initCodeBlocks } from '../public/app.js';
 
 const home = await readFile('_site/index.html', 'utf8');
+const guidesPage = await readFile('_site/rehberler/index.html', 'utf8');
 const { document: homeDocument } = parseHTML(home);
 const base = homeDocument.querySelector('meta[name="site-root"]').content;
 const index = JSON.parse(await readFile('_site/search-index.json', 'utf8'));
 
 test('catalog combines topic and query, exposes empty state and resets both', () => {
-  const { document, window } = parseHTML(home);
+  const { document, window } = parseHTML(guidesPage);
   initCatalog(document);
   const rows = [...document.querySelectorAll('[data-catalog-item]')];
   const visible = () => rows.filter(row => !row.hidden);
@@ -34,6 +35,22 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   assert.equal(status.textContent, 'All 24 guides shown.');
   assert.equal(status.classList.contains('console-sr-only'), true);
   assert.equal(document.querySelector('[data-filter="all"]').getAttribute('aria-pressed'), 'true');
+});
+
+test('home features one guide per route and four labs without a catalog filter', async () => {
+  const { routes } = await import('../src/catalog.mjs');
+  const { document } = parseHTML(home);
+  assert.equal(initCatalog(document), undefined);
+  assert.equal(document.getElementById('catalog-query'), null);
+  assert.equal(document.querySelectorAll('[data-filter]').length, 0);
+  const rows = [...document.querySelectorAll('.catalog-row .row-title')].map(link => link.getAttribute('href'));
+  assert.deepEqual(rows, routes.map(route => `${base}${route.pages[1] ?? route.pages[0]}.html`));
+  const labs = [...document.querySelectorAll('.lab-grid .lab-card .lab-number')].map(label => label.firstChild.textContent.trim());
+  assert.deepEqual(labs, ['LAB 01', 'LAB 05', 'LAB 08', 'LAB 11']);
+  assert.ok(document.querySelector(`.section-more a[href="${base}rehberler/index.html"]`));
+  assert.ok(document.querySelector(`.section-more a[href="${base}laboratuvarlar/index.html"]`));
+  const { document: labsDocument } = parseHTML(await readFile('_site/laboratuvarlar/index.html', 'utf8'));
+  assert.equal(labsDocument.querySelectorAll('.labs-list .lab-card').length, 14);
 });
 
 test('search opens, loads once, renders matching content safely and closes', async () => {
