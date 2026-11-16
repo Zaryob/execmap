@@ -111,3 +111,53 @@ test('English content and controls ignore a saved Turkish preference', async ({ 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Copy code' }).first()).toBeVisible();
 });
+
+test('a floating file header keeps the file name readable on narrow screens with large text', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'The compact floating header exists only on narrow screens.');
+  const origin = new URL(testInfo.project.use.baseURL).origin;
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+    const style = document.createElement('style');
+    style.textContent = 'html { font-size: 200% !important; }';
+    document.head.append(style);
+  }));
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 700 });
+    for (const route of ['laboratuvarlar/gdb-ilk-inceleme.html', 'laboratuvarlar/derleme-farklari.html']) {
+      await page.goto(route);
+      await page.evaluate(() => document.fonts.ready);
+      const head = page.locator('.code-block > .code-file').first();
+      await head.evaluate(element => {
+        const block = element.parentElement.getBoundingClientRect();
+        window.scrollBy(0, block.top + block.height / 2 - innerHeight / 2);
+      });
+      await expect(head).toHaveClass(/code-file--stuck/);
+      const geometry = await head.evaluate(element => {
+        const tab = element.querySelector('.code-tab');
+        const copy = element.parentElement.querySelector('.console-copy');
+        const box = element.getBoundingClientRect();
+        const copyBox = copy.getBoundingClientRect();
+        const name = tab.getBoundingClientRect();
+        const targets = [...element.querySelectorAll('a, button'), copy].map(item => item.getBoundingClientRect());
+        return {
+          nameCut: tab.scrollWidth > tab.clientWidth + 1,
+          headHeight: box.height,
+          rowHeight: parseFloat(getComputedStyle(element).minHeight),
+          copyInside: copyBox.top >= box.top - 0.5 && copyBox.bottom <= box.bottom + 0.5,
+          copyOverName: copyBox.left < name.right - 0.5 && copyBox.top < name.bottom - 0.5 && copyBox.bottom > name.top + 0.5,
+          smallestTarget: Math.min(...targets.map(item => Math.min(item.width, item.height))),
+        };
+      });
+      expect(geometry.nameCut, `${route} at ${width}px`).toBe(false);
+      expect(geometry.headHeight, `${route} at ${width}px`).toBeLessThanOrEqual(2 * geometry.rowHeight + 2);
+      expect(geometry.copyInside).toBe(true);
+      expect(geometry.copyOverName).toBe(false);
+      expect(geometry.smallestTarget).toBeGreaterThanOrEqual(44);
+    }
+  }
+  const copy = page.locator('.code-block:has(> .code-file--stuck)').getByRole('button', { name: 'Copy code' });
+  await copy.click();
+  await expect(copy).toHaveAttribute('data-copy-state', 'copied');
+  await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toHaveCount(1);
+  await expect(copy).not.toHaveAttribute('data-copy-state', /./, { timeout: 4000 });
+});
