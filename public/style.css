@@ -13,11 +13,13 @@
 .terminal-preview { border: 1px solid var(--line); background: var(--surface); min-width: 0; align-self: center; }
 .terminal-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 16px; font-size: var(--text-xs); border-bottom: 1px solid var(--line); color: var(--muted); }
 .terminal-title > span:first-child { display: flex; align-items: center; gap: 9px; }
-.terminal-body { padding: 19px 22px 15px; font-size: var(--text-xs); overflow: hidden; }
+.terminal-body { padding: 19px 22px 15px; font-size: var(--text-xs); overflow: hidden; container-type: inline-size; }
 .terminal-body p { margin: 0 0 14px; }
 .terminal-body .prompt { color: var(--accent); padding-right: 8px; }
 .terminal-muted { color: var(--muted); padding-bottom: 5px; }
-.segment-line { display: grid; grid-template-columns: 50px 68px 34px 1fr; align-items: center; gap: 9px; margin: 8px 0; color: var(--muted); }
+/* Columns follow the text size (ch); when enlarged text no longer fits one row, each segment takes two rows. */
+.segment-line { display: grid; grid-template-columns: 6ch 8.5ch 4.25ch minmax(0,1fr); align-items: center; gap: 4px 9px; margin: 8px 0; color: var(--muted); white-space: nowrap; }
+@container (max-width: 27ch) { .segment-line { grid-template-columns: max-content minmax(0,1fr); } }
 .segment-line span:first-child { color: var(--ink); }
 .segment-bar { display: block; height: 12px; border: 1px solid var(--control-border); background: var(--selection); }
 .seg-a { width: 60%; }.seg-b { width: 92%; background: var(--accent); }.seg-c { width: 44%; }.seg-d { width: 70%; }
@@ -193,7 +195,7 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .home-intro h1 { font-size: 2rem; }
   .terminal-body { padding-inline: 14px; }.terminal-title { padding-inline: 12px; font-size: var(--text-xs); }
   .terminal-title > span:last-child { display: none; }
-  .segment-line { grid-template-columns: 40px 58px 28px 1fr; gap: 6px; font-size: var(--text-xs); }
+  .segment-line { column-gap: 6px; font-size: var(--text-xs); }
   .trace-line { gap: 6px; font-size: var(--text-xs); }
   .route-card { padding: 20px !important; }.route-card h3 { font-size: 1rem; }
   .catalog-row { grid-template-columns: 24px minmax(0,1fr) 120px; gap: 13px; }
@@ -205,7 +207,7 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .home-intro h1 { font-size: clamp(1.85rem, 5.7vw, 2.5rem); }
   .lead { font-size: 1rem; }.desktop-break { display: none; }
   .terminal-preview { max-width: 100%; }.terminal-title > span:last-child { display: inline; }
-  .terminal-body { padding: 16px 20px; }.segment-line { grid-template-columns: 48px 68px 36px 1fr; gap: 9px; font-size: var(--text-xs); }
+  .terminal-body { padding: 16px 20px; }.segment-line { column-gap: 9px; font-size: var(--text-xs); }
   .stats-strip { gap: 10px 20px; }.stats-strip > a { margin-left: 0; }
   .stats-strip > span:nth-child(3) { flex-basis: 100%; order: 3; }
   .section-heading { align-items: start; }.section-heading h2 { font-size: 1.125rem; }.section-heading > a { font-size: var(--text-xs); }
