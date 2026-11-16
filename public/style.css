@@ -12,11 +12,13 @@
 .terminal-preview { border: 1px solid var(--line); background: var(--surface); min-width: 0; align-self: center; }
 .terminal-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 16px; font-size: var(--text-xs); border-bottom: 1px solid var(--line); color: var(--muted); }
 .terminal-title > span:first-child { display: flex; align-items: center; gap: 9px; }
-.terminal-body { padding: 19px 22px 15px; font-size: var(--text-xs); overflow: hidden; }
+.terminal-body { padding: 19px 22px 15px; font-size: var(--text-xs); overflow: hidden; container-type: inline-size; }
 .terminal-body p { margin: 0 0 14px; }
 .terminal-body .prompt { color: var(--accent); padding-right: 8px; }
 .terminal-muted { color: var(--muted); padding-bottom: 5px; }
-.segment-line { display: grid; grid-template-columns: 50px 68px 34px 1fr; align-items: center; gap: 9px; margin: 8px 0; color: var(--muted); }
+/* Columns follow the text size (ch); when enlarged text no longer fits one row, each segment takes two rows. */
+.segment-line { display: grid; grid-template-columns: 6ch 8.5ch 4.25ch minmax(0,1fr); align-items: center; gap: 4px 9px; margin: 8px 0; color: var(--muted); white-space: nowrap; }
+@container (max-width: 27ch) { .segment-line { grid-template-columns: max-content minmax(0,1fr); } }
 .segment-line span:first-child { color: var(--ink); }
 .segment-bar { display: block; height: 12px; border: 1px solid var(--control-border); background: var(--selection); }
 .seg-a { width: 60%; }.seg-b { width: 92%; background: var(--accent); }.seg-c { width: 44%; }.seg-d { width: 70%; }
@@ -164,6 +166,38 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .console-search__results .result-excerpt { color: var(--muted); font: .875rem/1.6 var(--font-prose); margin: 6px 0 0; }
 .console-search__results .result-kind { font-size: var(--text-xs); color: var(--accent); }
 .search-error { color: var(--danger); }
+.search-close-short { display: none; }
+/* Short or narrow screens (an open on-screen keyboard leaves little height): a compact title row and a results list that takes the remaining height, so the input and the first results stay in view. */
+@media (max-width: 560px), (max-height: 560px) {
+  .execmap-site .console-search { margin: 8px auto auto; max-height: calc(100dvh - 16px); padding: 12px 16px; }
+  .execmap-site .console-search[open] { display: flex; flex-direction: column; }
+  .execmap-site .console-search[open] > :not(.console-search__results) { flex-shrink: 0; }
+  .execmap-site .console-search__heading { margin-bottom: 6px; gap: 8px; }
+  .execmap-site .console-search__heading h2 { font-size: var(--text-base); }
+  .execmap-site .search-close { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 8px; font-size: 1.25rem; line-height: 1; }
+  .search-close-long { display: none; }.search-close-short { display: inline; }
+  .execmap-site .console-search label { margin-bottom: 4px; }
+  .execmap-site .console-search__status { margin-top: 6px; }
+  .execmap-site .console-search__results { flex: 1 1 auto; min-height: 4.5rem; max-height: none; margin-top: 8px; }
+}
+@media (max-height: 420px) {
+  .execmap-site .console-search { margin-top: 4px; max-height: calc(100dvh - 8px); padding-block: 8px; }
+  .execmap-site .console-search__heading { margin-bottom: 2px; }
+  .execmap-site .console-search label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+  .execmap-site .console-search__status { margin-top: 4px; }
+  .execmap-site .console-search__results { min-height: 3.5rem; margin-top: 4px; }
+}
+@media (max-height: 420px) and (min-width: 561px) {
+  /* Wide but short (landscape with a keyboard): the field description shares the title row. */
+  .execmap-site .console-search[open] { display: grid; grid-template-columns: auto minmax(0,1fr) auto; grid-template-rows: auto auto auto minmax(3.5rem,1fr); column-gap: 16px; align-items: center; }
+  .execmap-site .console-search__heading { display: contents; }
+  .execmap-site .console-search__heading h2 { grid-area: 1 / 1; }
+  .execmap-site .console-search label { grid-area: 1 / 2; margin: 0; }
+  .execmap-site .search-close { grid-area: 1 / 3; }
+  .execmap-site .console-search :is(input, .console-search__status, .console-search__results) { grid-column: 1 / -1; }
+  .execmap-site .console-search input { margin-top: 6px; }
+  .execmap-site .console-search__results { align-self: stretch; }
+}
 @media (max-width: 1250px) {
   .reading-layout { grid-template-columns: 280px minmax(0,1fr); gap: 28px; }
   .reading-toc { display: none; }.mobile-toc { display: block; padding: 16px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 28px; }
@@ -191,7 +225,7 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .home-intro h1 { font-size: 2rem; }
   .terminal-body { padding-inline: 14px; }.terminal-title { padding-inline: 12px; font-size: var(--text-xs); }
   .terminal-title > span:last-child { display: none; }
-  .segment-line { grid-template-columns: 40px 58px 28px 1fr; gap: 6px; font-size: var(--text-xs); }
+  .segment-line { column-gap: 6px; font-size: var(--text-xs); }
   .trace-line { gap: 6px; font-size: var(--text-xs); }
   .route-card { padding: 20px !important; }.route-card h3 { font-size: 1rem; }
   .catalog-row { grid-template-columns: 24px minmax(0,1fr) 120px; gap: 13px; }
@@ -203,7 +237,7 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .home-intro h1 { font-size: clamp(1.85rem, 5.7vw, 2.5rem); }
   .lead { font-size: 1rem; }.desktop-break { display: none; }
   .terminal-preview { max-width: 100%; }.terminal-title > span:last-child { display: inline; }
-  .terminal-body { padding: 16px 20px; }.segment-line { grid-template-columns: 48px 68px 36px 1fr; gap: 9px; font-size: var(--text-xs); }
+  .terminal-body { padding: 16px 20px; }.segment-line { column-gap: 9px; font-size: var(--text-xs); }
   .stats-strip { gap: 10px 20px; }.stats-strip > a { margin-left: 0; }
   .stats-strip > span:nth-child(3) { flex-basis: 100%; order: 3; }
   .section-heading { align-items: start; }.section-heading h2 { font-size: 1.125rem; }.section-heading > a { font-size: var(--text-xs); }
@@ -248,11 +282,20 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .code-block.is-folded pre { max-height: calc(1.85em * 18); overflow-y: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent); mask-image: linear-gradient(to bottom, #000 72%, transparent); }
 .code-fold-toggle { display: block; width: 100%; min-height: 40px; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-top: 0; background: var(--surface); color: var(--link); font: var(--text-xs)/1.6 var(--font-mono); text-align: left; cursor: pointer; }
 .code-fold-toggle:is(:hover, :focus-visible) { background: var(--wash); text-decoration: underline; }
+@media (pointer: coarse) {
+  .code-download { display: inline-flex; align-items: center; min-height: 44px; margin-block: -5px; }
+  .execmap-site .console-copy { top: -44px; min-height: 44px !important; }
+}
+/* Narrow screens: the file tab gets its own row; language, line count and Download share the row beside Copy. */
 @media (max-width: 700px) {
-  .code-info { display: none; }
-  .code-tab { max-width: 60%; }
+  .code-file { --copy-room: calc(7ch + 30px); flex-wrap: wrap; gap: 0 6px; padding: 0 var(--copy-room) 0 14px; }
+  .code-file::before { content: ""; order: 1; flex: 0 0 100%; }
+  .code-file > :not(.code-tab) { order: 2; min-height: 40px; display: inline-flex; align-items: center; }
+  .code-tab { min-height: 40px; max-width: calc(100% + 14px + var(--copy-room)); margin: 0 calc(-1 * var(--copy-room)) 0 -14px; }
+  .code-download { margin-block: 0; }
   .code-gutter { padding-inline: 8px; margin-right: 10px; }
 }
+@media (max-width: 700px) and (pointer: coarse) { .code-file > :not(.code-tab) { min-height: 44px; } }
 @media print {
   .code-gutter, .code-fold-toggle, .code-download { display: none !important; }
   .execmap-site .prose pre.has-lines { display: block; padding-inline-start: 18px; }
