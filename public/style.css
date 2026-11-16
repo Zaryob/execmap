@@ -122,7 +122,6 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .prose p { margin: 0 0 1.2em; }
 .prose h2 { margin: 2em 0 .85em; font-size: 1.3125rem; position: relative; }
 .prose h3 { margin: 1.7em 0 .7em; font-size: 1.125rem; }
-.prose :is(h2,h3) { scroll-margin-top: 110px; }
 .prose :is(ul,ol) { padding-left: 24px; margin: 0 0 1.5em; }
 .prose li { margin: .5em 0; padding-left: 3px; }
 .prose strong { font-weight: 600; }
