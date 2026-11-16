@@ -252,11 +252,20 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .code-block.is-folded pre { max-height: calc(1.85em * 18); overflow-y: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent); mask-image: linear-gradient(to bottom, #000 72%, transparent); }
 .code-fold-toggle { display: block; width: 100%; min-height: 40px; margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-top: 0; background: var(--surface); color: var(--link); font: var(--text-xs)/1.6 var(--font-mono); text-align: left; cursor: pointer; }
 .code-fold-toggle:is(:hover, :focus-visible) { background: var(--wash); text-decoration: underline; }
+@media (pointer: coarse) {
+  .code-download { display: inline-flex; align-items: center; min-height: 44px; margin-block: -5px; }
+  .execmap-site .console-copy { top: -44px; min-height: 44px !important; }
+}
+/* Narrow screens: the file tab gets its own row; language, line count and Download share the row beside Copy. */
 @media (max-width: 700px) {
-  .code-info { display: none; }
-  .code-tab { max-width: 60%; }
+  .code-file { --copy-room: calc(7ch + 30px); flex-wrap: wrap; gap: 0 6px; padding: 0 var(--copy-room) 0 14px; }
+  .code-file::before { content: ""; order: 1; flex: 0 0 100%; }
+  .code-file > :not(.code-tab) { order: 2; min-height: 40px; display: inline-flex; align-items: center; }
+  .code-tab { min-height: 40px; max-width: calc(100% + 14px + var(--copy-room)); margin: 0 calc(-1 * var(--copy-room)) 0 -14px; }
+  .code-download { margin-block: 0; }
   .code-gutter { padding-inline: 8px; margin-right: 10px; }
 }
+@media (max-width: 700px) and (pointer: coarse) { .code-file > :not(.code-tab) { min-height: 44px; } }
 @media print {
   .code-gutter, .code-fold-toggle, .code-download { display: none !important; }
   .execmap-site .prose pre.has-lines { display: block; padding-inline-start: 18px; }
