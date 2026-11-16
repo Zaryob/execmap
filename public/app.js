@@ -211,21 +211,48 @@ export function initStuckCodeHeads(doc = document) {
   let observer = null;
   let margin = '';
   const sticky = head => win.getComputedStyle(head).position === 'sticky';
+  // The compact row must show the whole file name, or at least ten characters of a longer one;
+  // when it cannot (narrow screen, large text), the name takes its own row above the buttons.
+  const nameFits = head => {
+    const tab = head.querySelector(':scope > .code-tab');
+    const name = tab?.textContent.trim() || '';
+    // The compact row exists only on narrow screens (the same breakpoint as style.css).
+    if (!name || !win.matchMedia?.('(max-width: 700px)').matches) return true;
+    const style = win.getComputedStyle(tab);
+    const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const full = tab.scrollWidth - padding;
+    const room = tab.clientWidth - padding;
+    // A cut name also gives one character's room to the ellipsis.
+    return full <= room + 1 || room >= (full / name.length) * 11;
+  };
+  const fit = head => {
+    head.classList.remove('code-file--stuck', 'code-file--stuck-two-rows');
+    const rest = head.offsetHeight;
+    head.classList.add('code-file--stuck');
+    if (!nameFits(head)) head.classList.add('code-file--stuck-two-rows');
+    // The code under the header keeps its place; the header itself may still ride to the block's end.
+    if (head.nextElementSibling) head.nextElementSibling.style.marginTop = `${Math.max(0, rest - head.offsetHeight)}px`;
+    head.parentElement.style.setProperty('--code-head-stuck', `${head.offsetHeight}px`);
+  };
   const setStuck = (head, stuck) => {
     if (head.classList.contains('code-file--stuck') === stuck) return;
-    const block = head.parentElement;
-    if (stuck) {
-      const rest = head.offsetHeight;
-      head.classList.add('code-file--stuck');
-      // The code under the header keeps its place; the header itself may still ride to the block's end.
-      if (head.nextElementSibling) head.nextElementSibling.style.marginTop = `${Math.max(0, rest - head.offsetHeight)}px`;
-      block.style.setProperty('--code-head-stuck', `${head.offsetHeight}px`);
-    } else {
-      head.classList.remove('code-file--stuck');
+    if (stuck) fit(head);
+    else {
+      head.classList.remove('code-file--stuck', 'code-file--stuck-two-rows');
       head.nextElementSibling?.style.removeProperty('margin-top');
-      block.style.removeProperty('--code-head-stuck');
+      head.parentElement.style.removeProperty('--code-head-stuck');
     }
   };
+  // While the header floats Copy shows an icon (style.css); its text still changes, and the
+  // icon follows it briefly: a tick after copying, the text itself when copying failed.
+  const label = text => win.ZaryobI18n?.t ? win.ZaryobI18n.t(text) : text;
+  const copyState = new win.MutationObserver(records => records.forEach(record => {
+    const button = record.target.closest?.('.console-copy');
+    if (!button) return;
+    const text = button.textContent.trim();
+    if (text === label('Copy')) button.removeAttribute('data-copy-state');
+    else button.dataset.copyState = text === label('Copied') ? 'copied' : 'failed';
+  }));
   const check = head => {
     const line = parseFloat(win.getComputedStyle(head).top);
     setStuck(head, sticky(head) && Number.isFinite(line) && head.parentElement.getBoundingClientRect().top < line - 0.5);
@@ -262,8 +289,15 @@ export function initStuckCodeHeads(doc = document) {
     const head = record.target.querySelector(':scope > .code-file');
     if (head) ensure(head);
   }));
-  heads.forEach(head => { mutations.observe(head.parentElement, { attributes: true, attributeFilter: ['class'] }); ensure(head); });
-  win.addEventListener('resize', () => heads.forEach(ensure), { passive: true });
+  heads.forEach(head => {
+    mutations.observe(head.parentElement, { attributes: true, attributeFilter: ['class'] });
+    copyState.observe(head.parentElement, { childList: true, subtree: true });
+    ensure(head);
+  });
+  win.addEventListener('resize', () => heads.forEach(head => {
+    ensure(head);
+    if (head.classList.contains('code-file--stuck')) fit(head);
+  }), { passive: true });
 }
 
 export function boot(doc = document) {

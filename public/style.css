@@ -314,6 +314,20 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .execmap-site .code-file--stuck > .console-code-toggle::before { content: "↔"; font-size: var(--text-xs); }
   .code-block:has(> .code-file--stuck) .console-code-actions--rail { top: calc(var(--console-code-stick, 0px) + var(--code-head-stuck, 0px)); }
   .code-block:has(> .code-file--stuck) .console-code-actions--rail > .console-copy { top: auto; bottom: 0; }
+  /* Copy shows an icon while the header floats, so the row keeps room for the file name. Its
+     accessible name stays "Copy code"; "Copied" is still announced and shows as a brief tick. */
+  .code-file.code-file--stuck { --copy-room: 58px; }
+  .execmap-site .code-block:has(> .code-file--stuck) .console-copy:not([data-copy-state="failed"]) { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: max(44px, 14px + var(--text-xs) * 1.5) !important; padding: 0 !important; font-size: 0 !important; }
+  .execmap-site .code-block:has(> .code-file--stuck) .console-copy:not([data-copy-state="failed"])::before { content: ""; width: calc(var(--text-xs) * 1.1); height: calc(var(--text-xs) * 1.1); background: currentColor; -webkit-mask: var(--code-copy-icon) center / contain no-repeat; mask: var(--code-copy-icon) center / contain no-repeat; }
+  .execmap-site .code-block:has(> .code-file--stuck) .console-copy { --code-copy-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Crect x='5.25' y='5.25' width='9' height='9.5' rx='1'/%3E%3Cpath d='M10.75 5.25V2.25a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3'/%3E%3C/svg%3E"); }
+  .execmap-site .code-block:has(> .code-file--stuck) .console-copy[data-copy-state="copied"] { --code-copy-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M2.5 8.5l3.5 3.5 7.5-8'/%3E%3C/svg%3E"); }
+  /* Too narrow for ten characters of the name in one row: the name gets its own row. */
+  .code-file.code-file--stuck-two-rows { flex-wrap: wrap; }
+  .code-file--stuck-two-rows > .code-tab { flex: 0 0 calc(100% + 14px + var(--copy-room)); min-height: 44px; margin-right: calc(-1 * var(--copy-room)); }
+  .code-file--stuck-two-rows > .console-code-toggle { margin-inline-start: 0; }
+}
+@media (max-width: 700px) and (forced-colors: active) {
+  .execmap-site .code-block:has(> .code-file--stuck) .console-copy::before { forced-color-adjust: none; background: ButtonText; }
 }
 @media print {
   .code-gutter, .code-fold-toggle, .code-download { display: none !important; }
