@@ -62,7 +62,7 @@ function renderMarkdown(page) {
         if (codeFiles.some(file => file.page === page.id && file.name === fileName)) throw new Error(`Duplicate code file "${fileName}" in ${page.id}`);
         const published = `code/${page.id}/${fileName}`;
         codeFiles.push({ page: page.id, name: fileName, path: published, text: text.endsWith('\n') ? text : `${text}\n` });
-        download = `<a class="code-download" href="${asset(published)}" download="${e(fileName)}" aria-label="Download ${e(fileName)}">Download ↓</a>`;
+        download = `<a class="code-download" href="${asset(published)}" download="${e(fileName)}" aria-label="Download ${e(fileName)}"><span class="code-download-word">Download&nbsp;</span>↓</a>`;
       }
       const numbered = fileName || numberedLanguages.has(target);
       const gutter = numbered ? `<span class="code-gutter" aria-hidden="true">${Array.from({ length: lines }, (_, i) => i + 1).join('\n')}</span>` : '';

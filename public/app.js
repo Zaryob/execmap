@@ -198,9 +198,77 @@ export function initCodeBlocks(doc = document, search = doc.defaultView?.locatio
   });
 }
 
+// On the shared theme a file header sticks under the page header while a block taller than the
+// screen scrolls past. While it floats it folds into one compact row (see style.css). A sentinel
+// spans each block and the observer watches a one-pixel band at the sticking line, so crossing
+// it, even in one jump, is seen. When the header is not sticky nothing is observed or changed.
+export function initStuckCodeHeads(doc = document) {
+  const win = doc.defaultView;
+  if (!win || !('IntersectionObserver' in win) || !('MutationObserver' in win)) return;
+  const heads = [...doc.querySelectorAll('.code-block > .code-file')];
+  if (!heads.length) return;
+  const sentinels = new Map();
+  let observer = null;
+  let margin = '';
+  const sticky = head => win.getComputedStyle(head).position === 'sticky';
+  const setStuck = (head, stuck) => {
+    if (head.classList.contains('code-file--stuck') === stuck) return;
+    const block = head.parentElement;
+    if (stuck) {
+      const rest = head.offsetHeight;
+      head.classList.add('code-file--stuck');
+      // The code under the header keeps its place; the header itself may still ride to the block's end.
+      if (head.nextElementSibling) head.nextElementSibling.style.marginTop = `${Math.max(0, rest - head.offsetHeight)}px`;
+      block.style.setProperty('--code-head-stuck', `${head.offsetHeight}px`);
+    } else {
+      head.classList.remove('code-file--stuck');
+      head.nextElementSibling?.style.removeProperty('margin-top');
+      block.style.removeProperty('--code-head-stuck');
+    }
+  };
+  const check = head => {
+    const line = parseFloat(win.getComputedStyle(head).top);
+    setStuck(head, sticky(head) && Number.isFinite(line) && head.parentElement.getBoundingClientRect().top < line - 0.5);
+  };
+  const ensure = head => {
+    let sentinel = sentinels.get(head);
+    if (!sticky(head)) {
+      if (sentinel && observer) observer.unobserve(sentinel);
+      setStuck(head, false);
+      return;
+    }
+    if (!sentinel) {
+      sentinel = doc.createElement('span');
+      sentinel.className = 'code-stick-sentinel';
+      sentinel.setAttribute('aria-hidden', 'true');
+      head.parentElement.append(sentinel);
+      sentinels.set(head, sentinel);
+    }
+    const line = Math.round(parseFloat(win.getComputedStyle(head).top) || 0);
+    const wanted = `-${line}px 0px -${Math.max(0, doc.documentElement.clientHeight - line - 1)}px 0px`;
+    if (!observer || wanted !== margin) {
+      observer?.disconnect();
+      margin = wanted;
+      observer = new win.IntersectionObserver(entries => entries.forEach(entry => {
+        const owner = heads.find(item => sentinels.get(item) === entry.target);
+        if (owner) check(owner);
+      }), { rootMargin: margin });
+      heads.forEach(item => { if (sentinels.has(item) && sticky(item)) observer.observe(sentinels.get(item)); });
+    } else observer.observe(sentinel);
+    check(head);
+  };
+  // The theme marks a tall block with a class; folding and unfolding change it too.
+  const mutations = new win.MutationObserver(records => records.forEach(record => {
+    const head = record.target.querySelector(':scope > .code-file');
+    if (head) ensure(head);
+  }));
+  heads.forEach(head => { mutations.observe(head.parentElement, { attributes: true, attributeFilter: ['class'] }); ensure(head); });
+  win.addEventListener('resize', () => heads.forEach(ensure), { passive: true });
+}
+
 export function boot(doc = document) {
   doc.querySelectorAll('[data-js-only]').forEach(element => { element.hidden = false; });
-  initCatalog(doc); initSearch(doc); initReading(doc); initCodeBlocks(doc);
+  initCatalog(doc); initSearch(doc); initReading(doc); initCodeBlocks(doc); initStuckCodeHeads(doc);
 }
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => boot(), { once: true });
