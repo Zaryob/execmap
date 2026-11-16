@@ -150,8 +150,8 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
 .toc-depth-3 { padding-left: 12px; }
 .toc-top { display: block; margin-top: 22px; font-size: var(--text-xs); }
 .mobile-toc { display: none; }
-.page-neighbors { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-top: 1px solid var(--line); margin-top: 38px; padding-top: 22px; }
-.page-neighbors a { font-size: .8125rem; text-decoration: none; line-height: 1.7; }
+.page-neighbors { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,12ch),1fr)); gap: 24px; border-top: 1px solid var(--line); margin-top: 38px; padding-top: 22px; }
+.page-neighbors a { font-size: .8125rem; text-decoration: none; line-height: 1.7; overflow-wrap: anywhere; }
 .page-neighbors a:last-child { text-align: right; }
 .page-neighbors small { display: block; color: var(--muted); margin-bottom: 8px; font-size: var(--text-xs); }
 .listing-main { padding-top: 30px; }
