@@ -225,25 +225,57 @@ export function initStuckCodeHeads(doc = document) {
     // A cut name also gives one character's room to the ellipsis.
     return full <= room + 1 || room >= (full / name.length) * 11;
   };
+  const copyWidths = new WeakMap();
+  const unfit = head => {
+    head.classList.remove('code-file--stuck', 'code-file--stuck-two-rows', 'code-file--stuck-word');
+    head.style.removeProperty('--copy-room');
+    ['--code-head-stuck', '--code-head-gap', '--code-copy-lift', '--code-copy-width'].forEach(name => head.parentElement.style.removeProperty(name));
+  };
   const fit = head => {
-    head.classList.remove('code-file--stuck', 'code-file--stuck-two-rows');
+    const block = head.parentElement;
+    const copy = block.querySelector('.console-copy');
+    unfit(head);
     const rest = head.offsetHeight;
     head.classList.add('code-file--stuck');
+    // Copy keeps its word while the row still has room for the file name as nameFits asks;
+    // otherwise it shows an icon, and when even that leaves too little room the name takes its own row.
+    if (copy && win.matchMedia?.('(max-width: 700px)').matches) {
+      head.classList.add('code-file--stuck-word');
+      // The word's width, kept from a moment when the button showed it rather than a tick or an error.
+      if (!copy.dataset.copyState) copyWidths.set(copy, copy.getBoundingClientRect().width);
+      const width = copyWidths.get(copy) ?? copy.getBoundingClientRect().width;
+      block.style.setProperty('--code-copy-width', `${width}px`);
+      head.style.setProperty('--copy-room', `${width + 14}px`);
+      if (!nameFits(head)) {
+        head.classList.remove('code-file--stuck-word');
+        head.style.removeProperty('--copy-room');
+      }
+    }
     if (!nameFits(head)) head.classList.add('code-file--stuck-two-rows');
     // The code under the header keeps its place; the header itself may still ride to the block's end.
-    if (head.nextElementSibling) head.nextElementSibling.style.marginTop = `${Math.max(0, rest - head.offsetHeight)}px`;
-    head.parentElement.style.setProperty('--code-head-stuck', `${head.offsetHeight}px`);
+    const gap = Math.max(0, rest - head.offsetHeight);
+    if (head.nextElementSibling) head.nextElementSibling.style.marginTop = `${gap}px`;
+    const height = head.getBoundingClientRect().height;
+    block.style.setProperty('--code-head-stuck', `${height}px`);
+    // Copy rides on a rail just under the header, and that gap lets it rise to the header at once.
+    block.style.setProperty('--code-head-gap', `${gap}px`);
+    // Lift Copy so its middle lines up with the header's other buttons.
+    const button = head.querySelector(':scope > :is(.code-download, .console-code-toggle)');
+    if (copy && button) {
+      const row = button.getBoundingClientRect();
+      const lift = head.getBoundingClientRect().top + height - (row.top + row.bottom) / 2 - copy.getBoundingClientRect().height / 2;
+      block.style.setProperty('--code-copy-lift', `${lift}px`);
+    }
   };
   const setStuck = (head, stuck) => {
     if (head.classList.contains('code-file--stuck') === stuck) return;
     if (stuck) fit(head);
     else {
-      head.classList.remove('code-file--stuck', 'code-file--stuck-two-rows');
+      unfit(head);
       head.nextElementSibling?.style.removeProperty('margin-top');
-      head.parentElement.style.removeProperty('--code-head-stuck');
     }
   };
-  // While the header floats Copy shows an icon (style.css); its text still changes, and the
+  // While the header floats Copy may show an icon (style.css); its text still changes, and the
   // icon follows it briefly: a tick after copying, the text itself when copying failed.
   const label = text => win.ZaryobI18n?.t ? win.ZaryobI18n.t(text) : text;
   const copyState = new win.MutationObserver(records => records.forEach(record => {
