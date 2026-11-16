@@ -8,6 +8,7 @@ export function initCatalog(doc = document) {
   const status = doc.getElementById('catalog-status');
   const empty = doc.getElementById('catalog-empty');
   let filter = 'all';
+  let started = false;
   function update() {
     const terms = normalize(input.value).trim().split(/\s+/).filter(Boolean);
     let count = 0;
@@ -18,7 +19,12 @@ export function initCatalog(doc = document) {
       if (visible) count++;
     }
     for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
-    status.textContent = `${count} / ${items.length} guides shown.`;
+    // The count is visible only while a topic or query narrows the list;
+    // after a reset screen readers still hear that every guide is back.
+    const active = filter !== 'all' || terms.length > 0;
+    status.textContent = active ? `${count} / ${items.length} guides shown.` : started ? `All ${items.length} guides shown.` : '';
+    status.classList.toggle('console-sr-only', !active);
+    started = true;
     empty.hidden = count !== 0;
   }
   input.addEventListener('input', update);
