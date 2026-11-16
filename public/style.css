@@ -297,6 +297,22 @@ details[open] > summary > .tree-chevron { transform: rotate(0); }
   .code-gutter { padding-inline: 8px; margin-right: 10px; }
 }
 @media (max-width: 700px) and (pointer: coarse) { .code-file > :not(.code-tab) { min-height: 44px; } }
+/* A file header that floats under the page header (the shared theme makes it sticky in a block
+   taller than the screen) folds into one compact row so it covers less code; app.js marks it. */
+.code-block:has(> .code-file) { position: relative; }
+.code-stick-sentinel { position: absolute; inset-block: 0; left: 0; width: 1px; pointer-events: none; visibility: hidden; }
+@media (max-width: 700px) {
+  .code-file.code-file--stuck { flex-wrap: nowrap; min-height: max(44px, calc(var(--text-xs) * 1.6 + 14px)); }
+  .code-file--stuck::before { display: none; }
+  .code-file--stuck > .code-tab { flex: 1 1 auto; min-width: 0; max-width: none; margin: 0 0 0 -14px; align-self: stretch; }
+  .code-file--stuck > .code-info { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .code-file--stuck > :is(.code-download, .console-code-toggle) { flex: 0 0 auto; justify-content: center; min-width: 44px; min-height: 44px; padding-inline: 6px; }
+  .code-file--stuck .code-download-word { display: none; }
+  .execmap-site .code-file--stuck > .console-code-toggle { font-size: 0; }
+  .execmap-site .code-file--stuck > .console-code-toggle::before { content: "↔"; font-size: var(--text-xs); }
+  .code-block:has(> .code-file--stuck) .console-code-actions--rail { top: calc(var(--console-code-stick, 0px) + var(--code-head-stuck, 0px)); }
+  .code-block:has(> .code-file--stuck) .console-code-actions--rail > .console-copy { top: auto; bottom: 0; }
+}
 @media print {
   .code-gutter, .code-fold-toggle, .code-download { display: none !important; }
   .execmap-site .prose pre.has-lines { display: block; padding-inline-start: 18px; }
