@@ -146,6 +146,7 @@ test('a floating file header keeps the file name readable on narrow screens with
           copyInside: copyBox.top >= box.top - 0.5 && copyBox.bottom <= box.bottom + 0.5,
           copyOverName: copyBox.left < name.right - 0.5 && copyBox.top < name.bottom - 0.5 && copyBox.bottom > name.top + 0.5,
           smallestTarget: Math.min(...targets.map(item => Math.min(item.width, item.height))),
+          centres: [element.querySelector('.code-download'), element.querySelector('.console-code-toggle'), copy].map(item => { const r = item.getBoundingClientRect(); return (r.top + r.bottom) / 2; }),
         };
       });
       expect(geometry.nameCut, `${route} at ${width}px`).toBe(false);
@@ -153,6 +154,8 @@ test('a floating file header keeps the file name readable on narrow screens with
       expect(geometry.copyInside).toBe(true);
       expect(geometry.copyOverName).toBe(false);
       expect(geometry.smallestTarget).toBeGreaterThanOrEqual(44);
+      // Download, wrap and Copy share one centre line.
+      expect(Math.max(...geometry.centres) - Math.min(...geometry.centres), `${route} at ${width}px`).toBeLessThan(0.5);
     }
   }
   const copy = page.locator('.code-block:has(> .code-file--stuck)').getByRole('button', { name: 'Copy code' });
@@ -160,4 +163,65 @@ test('a floating file header keeps the file name readable on narrow screens with
   await expect(copy).toHaveAttribute('data-copy-state', 'copied');
   await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toHaveCount(1);
   await expect(copy).not.toHaveAttribute('data-copy-state', /./, { timeout: 4000 });
+});
+
+test('a floating file header keeps the Copy word when the row has room and lines it up with the other buttons', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'The compact floating header exists only on narrow screens.');
+  const origin = new URL(testInfo.project.use.baseURL).origin;
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+  const float = async () => {
+    const head = page.locator('.code-block > .code-file').first();
+    await head.evaluate(element => {
+      const block = element.parentElement.getBoundingClientRect();
+      window.scrollBy(0, block.top + block.height / 2 - innerHeight / 2);
+    });
+    await expect(head).toHaveClass(/code-file--stuck/);
+    return head;
+  };
+  const measure = head => head.evaluate(element => {
+    const copy = element.parentElement.querySelector('.console-copy');
+    const tab = element.querySelector('.code-tab').getBoundingClientRect();
+    const box = copy.getBoundingClientRect();
+    const centre = item => { const r = item.getBoundingClientRect(); return (r.top + r.bottom) / 2; };
+    return {
+      word: getComputedStyle(copy).fontSize !== '0px' && getComputedStyle(copy, '::before').content === 'none',
+      text: copy.textContent.trim(),
+      width: box.width,
+      overName: box.left < tab.right - 0.5,
+      nameCut: element.querySelector('.code-tab').scrollWidth > element.querySelector('.code-tab').clientWidth + 1,
+      offsets: [element.querySelector('.code-download'), element.querySelector('.console-code-toggle')].map(item => centre(copy) - centre(item)),
+    };
+  });
+  // 390px wide at 100% text: the whole file name and the word fit in one row.
+  await page.setViewportSize({ width: 390, height: 560 });
+  await page.goto('laboratuvarlar/derleme-farklari.html');
+  await page.evaluate(() => document.fonts.ready);
+  let head = await float();
+  let geometry = await measure(head);
+  expect(geometry.word).toBe(true);
+  expect(geometry.text).toBe('Copy');
+  expect(geometry.overName).toBe(false);
+  expect(geometry.nameCut).toBe(false);
+  for (const offset of geometry.offsets) expect(Math.abs(offset)).toBeLessThan(0.5);
+  // Copying shows the tick in the same width and is still announced.
+  const copy = page.locator('.code-block:has(> .code-file--stuck)').getByRole('button', { name: 'Copy code' });
+  await copy.click();
+  await expect(copy).toHaveAttribute('data-copy-state', 'copied');
+  expect(Math.abs((await copy.boundingBox()).width - geometry.width)).toBeLessThan(0.5);
+  await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toHaveCount(1);
+  await expect(copy).not.toHaveAttribute('data-copy-state', /./, { timeout: 4000 });
+  // Narrower: the word would leave fewer than ten characters of the name, so Copy becomes an icon; it comes back on widening.
+  await page.goto('laboratuvarlar/gdb-ilk-inceleme.html');
+  await page.evaluate(() => document.fonts.ready);
+  head = await float();
+  expect((await measure(head)).word).toBe(true);
+  await page.setViewportSize({ width: 320, height: 560 });
+  await expect(head).not.toHaveClass(/code-file--stuck-word/);
+  geometry = await measure(head);
+  expect(geometry.word).toBe(false);
+  expect(geometry.overName).toBe(false);
+  for (const offset of geometry.offsets) expect(Math.abs(offset)).toBeLessThan(0.5);
+  await page.setViewportSize({ width: 390, height: 560 });
+  await expect(head).toHaveClass(/code-file--stuck-word/);
+  expect((await measure(head)).word).toBe(true);
 });
