@@ -36,6 +36,7 @@
 .section-heading .section-note { color: var(--muted); font-size: var(--text-xs); margin: 8px 0 0; }
 .section-heading > a,.section-count { max-width: 100%; overflow-wrap: anywhere; font-size: var(--text-xs); flex-shrink: 0; }
 .section-count { color: var(--muted); }
+.section-more { margin: 14px 0 0; font-size: var(--text-xs); overflow-wrap: anywhere; }
 .route-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); border: 1px solid var(--line); }
 .execmap-site .route-card { color: var(--ink); padding: 23px 25px 25px; text-decoration: none; min-width: 0; }
 .route-card:not(:last-child) { border-right: 1px solid var(--line); }
