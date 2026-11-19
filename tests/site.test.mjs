@@ -18,10 +18,10 @@ const htmlFiles = (await walk(root)).filter(file => file.endsWith('.html'));
 
 test('all content is published with one title, a main landmark and navigation', async () => {
   assert.equal(pages.length, 42);
-  assert.equal(htmlFiles.length, 46);
+  assert.equal(htmlFiles.length, 47);
   for (const file of htmlFiles) {
     const { document } = parseHTML(await readFile(file, 'utf8'));
-    assert.equal(document.documentElement.lang, 'en', file);
+    assert.equal(document.documentElement.lang, path.relative(root, file) === 'tr/index.html' ? 'tr' : 'en', file);
     assert.equal(document.querySelectorAll('h1').length, 1, file);
     assert.equal(document.querySelectorAll('main').length, 1, file);
     assert.ok(document.querySelector('#main'), file);
