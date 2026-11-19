@@ -1,0 +1,33 @@
+# Execmap — Linux Binary Lifecycle and Execution Map
+
+> A source-backed study of Linux ELF binary loading, memory layout, dynamic linking, and runtime observation.
+
+Execmap documents the path an executable takes from disk to execution: ELF headers, segments, dynamic linking with ld.so, auxiliary vectors (auxv), address space layout, and runtime tracing with eBPF, perf, and GDB.
+
+## Core Navigation
+
+- [Execmap Homepage](https://zaryob.github.io/execmap/): Overview, interactive map, and core concepts.
+- [Rehberler (Guides)](https://zaryob.github.io/execmap/rehberler/): In-depth conceptual guides to ELF internals and dynamic execution.
+- [Laboratuvarlar (Labs)](https://zaryob.github.io/execmap/laboratuvarlar/): Practical labs, reproducible examples, and debugging workflows.
+- [Kaynak Kütüphanesi](https://zaryob.github.io/execmap/kaynak-kutuphanesi.html): References, primary documentation, and standards.
+
+## Key Guides (Rehberler)
+
+- [ELF: Dosyadan Belleğe](https://zaryob.github.io/execmap/rehberler/elf-dosyadan-bellege.html): ELF structure, program headers, PT_LOAD segments, and memory mapping.
+- [Dinamik Bağlama (Dynamic Linking)](https://zaryob.github.io/execmap/rehberler/dinamik-baglama.html): The role of ld.so, PLT/GOT resolution, and DT_NEEDED libraries.
+- [Başlangıç ve auxv](https://zaryob.github.io/execmap/rehberler/baslangic-ve-auxv.html): Auxiliary vectors, process initialization, stack setup, and kernel handoff.
+- [Linker Düzeni](https://zaryob.github.io/execmap/rehberler/linker-duzeni.html): Section layout, symbol tables, and link-time relocation.
+- [bpftrace Temelleri](https://zaryob.github.io/execmap/rehberler/bpftrace-temelleri.html): eBPF-based user-space and kernel tracing.
+- [Perf ile Yürütme](https://zaryob.github.io/execmap/rehberler/perf-ile-yurutme.html): CPU performance counters, sampling, and execution bottlenecks.
+- [GDB Uzak Hedef](https://zaryob.github.io/execmap/rehberler/gdb-uzak-hedef.html): Remote debugging workflows with gdbserver and QEMU.
+
+## Practical Labs (Laboratuvarlar)
+
+- [Bellek İzinleri](https://zaryob.github.io/execmap/laboratuvarlar/bellek-izinleri.html): Inspecting W^X permissions, page protection, and mprotect.
+- [GDB İlk İnceleme](https://zaryob.github.io/execmap/laboratuvarlar/gdb-ilk-inceleme.html): Binary inspection, registers, and memory disassembly.
+- [bpftrace İlk Adımlar](https://zaryob.github.io/execmap/laboratuvarlar/bpftrace-ilk-adimlar.html): Writing targeted probes for system calls and process events.
+- [CPU Profili](https://zaryob.github.io/execmap/laboratuvarlar/cpu-profili.html): Flame graphs and hotspot profiling under Linux.
+
+## Raw Markdown Endpoints
+
+Execmap provides raw Markdown sources for every guide and lab under `raw/<category>/<name>.md` (e.g. `https://zaryob.github.io/execmap/raw/rehberler/elf-dosyadan-bellege.md`).
