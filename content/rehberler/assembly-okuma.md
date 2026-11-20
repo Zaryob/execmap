@@ -66,6 +66,8 @@ A C `if` may become a conditional jump (`jcc`), conditional move (`cmovcc`), `se
 
 Check your understanding: why is `lea` not a memory read? What happens to the upper half of `rax` after writing `eax`? Why should a C `if` not always lead you to search for `jne`? If you can answer using instruction and ABI sources, continue with the [GDB laboratory](../laboratuvarlar/gdb-ilk-inceleme.md), then return to [stripped ELF](stripped-elf.md).
 
+Compare entry registers and stack slots across platforms in [Function ABIs and binary compatibility](abi.md).
+
 ## Sources and supplementary study
 
 - [Intel SDM](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html): volume 1 for registers and data representation; volume 2 for `MOV`, `LEA`, `CMP`, `TEST`, `Jcc`, `CMOVcc`, `CALL`, and `RET`.

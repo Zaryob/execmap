@@ -39,7 +39,7 @@ export function descriptionText(text, length = 155) {
   return clean.slice(0, end).trimEnd() + (end < clean.length ? '…' : '');
 }
 
-export async function loadPages(root) {
+export async function loadPages(root, { language = 'en' } = {}) {
   async function walk(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
     const files = await Promise.all(entries.map(entry => entry.isDirectory() ? walk(path.join(dir, entry.name)) : (entry.name.endsWith('.md') ? [path.join(dir, entry.name)] : [])));
@@ -64,7 +64,8 @@ export async function loadPages(root) {
     collectFields(Lexer.lex(parsed.markdown));
     const group = sections.find(section => section.pages.includes(slug));
     const kind = id.startsWith('laboratuvarlar/') ? 'laboratuvar' : id.startsWith('rehberler/') ? 'rehber' : 'sayfa';
-    return { ...parsed, id, slug, text, code: code.join(' '), headings: headings.join(' '), kind, group: group?.key || kind, section: group?.name || (kind === 'laboratuvar' ? 'Labs' : 'Reference'), description: descriptionText(summaries[slug] || parsed.description || text.replace(parsed.title, '').trim()), minutes: Math.max(2, Math.ceil(text.split(/\s+/).length / 190)), order: group ? sections.indexOf(group) * 100 + group.pages.indexOf(slug) : labOrder.indexOf(slug) };
+    const summary = (language === 'en' && summaries[slug]) || parsed.description || text.replace(parsed.title, '').trim();
+    return { ...parsed, id, slug, text, code: code.join(' '), headings: headings.join(' '), kind, group: group?.key || kind, section: group?.name || (kind === 'laboratuvar' ? 'Labs' : 'Reference'), description: descriptionText(summary), minutes: Math.max(2, Math.ceil(text.split(/\s+/).length / 190)), order: group ? sections.indexOf(group) * 100 + group.pages.indexOf(slug) : labOrder.indexOf(slug) };
   }));
 }
 export function normalizeBase(value = '/execmap') {
@@ -73,12 +74,12 @@ export function normalizeBase(value = '/execmap') {
   return value.replace(/\/$/, '');
 }
 export function pageUrl(id, base = '') { return `${base}/${id === 'index' ? '' : `${id}.html`}`; }
-export function rewriteLink(href, pageId, base, pageIds) {
+export function rewriteLink(href, pageId, base, pageIds, pageAddress = id => pageUrl(id, base)) {
   if (/^(https?:|mailto:)/i.test(href) || href.startsWith('#')) return href;
   if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//')) throw new Error(`Unsupported link: ${href}`);
   const match = href.match(/^([^?#]*)(.*)$/);
   if (!match[1].endsWith('.md')) return href;
   const id = path.posix.normalize(path.posix.join(path.posix.dirname(pageId), match[1])).replace(/\.md$/, '');
   if (!pageIds.has(id)) throw new Error(`Broken content link: ${pageId} -> ${href}`);
-  return pageUrl(id, base) + match[2];
+  return pageAddress(id) + match[2];
 }

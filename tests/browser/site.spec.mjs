@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 // Browser behaviour and geometry that a DOM-only test cannot verify.
+async function revealTools(page) {
+  const menu = page.locator('.console-menu');
+  if (await menu.isVisible() && await menu.getAttribute('aria-expanded') !== 'true') await menu.click();
+}
+
 test('search opens the selected result and highlights the original query', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -37,7 +42,7 @@ test('topic and text filters work together and reset the empty state', async ({ 
   await expect(page.getByRole('searchbox', { name: 'Filter guides' })).toHaveCount(0);
   await page.goto('rehberler/index.html');
   const all = await page.locator('[data-catalog-item]:visible').count();
-  expect(all).toBe(24);
+  expect(all).toBe(26);
   await page.getByRole('button', { name: 'Runtime', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Filter guides' }).fill('eBPF');
   await expect(page.locator('[data-catalog-item]:visible')).toHaveCount(1);
@@ -57,7 +62,8 @@ test('theme choice survives navigation and the compact menu is usable', async ({
     await page.getByRole('button', { name: 'Open menu' }).click();
     await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
   }
-  await page.getByRole('combobox', { name: 'Color theme' }).selectOption('light');
+  await page.getByRole('button', { name: /^Theme / }).click();
+  await page.getByRole('option', { name: 'Light', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Labs', exact: true }).click();
   await expect(page).toHaveURL(/laboratuvarlar\/index\.html$/);
@@ -83,11 +89,11 @@ test('copy buttons stay above code and copy the exact source', async ({ page, co
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expected);
 });
 
-test('reading pages and home do not overflow narrow viewports', async ({ page }, testInfo) => {
+test('reading pages, catalogues and home do not overflow narrow viewports', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile', 'The desktop run checks all viewport widths.');
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const route of ['./', 'laboratuvarlar/sembol-secimi.html', 'kaynak-kutuphanesi.html', 'rehberler/performans-analizine-giris.html', 'rehberler/bpftrace-temelleri.html', 'rehberler/debug-is-akisi.html', 'laboratuvarlar/cpu-profili.html', 'laboratuvarlar/yavas-program-teshisi.html']) {
+    for (const route of ['./', 'tr/', 'tr/rehberler/index.html', 'tr/laboratuvarlar/index.html', 'tr/kaynaklar/index.html', 'laboratuvarlar/sembol-secimi.html', 'kaynak-kutuphanesi.html', 'rehberler/performans-analizine-giris.html', 'rehberler/bpftrace-temelleri.html', 'rehberler/debug-is-akisi.html', 'laboratuvarlar/cpu-profili.html', 'laboratuvarlar/yavas-program-teshisi.html']) {
       await page.goto(route);
       await page.evaluate(() => document.fonts.ready);
       const size = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
@@ -97,19 +103,91 @@ test('reading pages and home do not overflow narrow viewports', async ({ page },
 });
 
 
+test('Turkish navigation, search and catalogue lead to correctly labelled content', async ({ page, baseURL }) => {
+  await page.goto('./');
+  const language = page.locator('.console-language .console-dropdown-button');
+  await revealTools(page);
+  await language.click();
+  await page.getByRole('option', { name: 'TR', exact: true }).click();
+  await expect(page).toHaveURL(/\/tr\/$/);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+  await expect(page.getByText('ELF dosyasının yolculuğu', { exact: true })).toBeVisible();
+  await expect(page.locator('.route-grid .route-card')).toHaveCount(3);
+  await expect(page.locator('.lab-grid .lab-card')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Execmap’te ara', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Execmap’te ara' });
+  await dialog.getByRole('searchbox').fill('işlev çağrısından');
+  const result = dialog.getByRole('link', { name: /İşlev çağrısından Linux sistem çağrısına/ });
+  await expect(result).toHaveAttribute('hreflang', 'tr');
+  await expect(result).toHaveAttribute('href', /\/tr\/rehberler\/syscall-boundary\.html/);
+  await dialog.getByRole('button', { name: 'Aramayı kapat' }).click();
+  const menu = page.getByRole('button', { name: 'Menüyü aç', exact: true });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Rehberler', exact: true }).click();
+  await expect(page.locator('main h1')).toHaveText('Rehberler');
+  await expect(page.locator('.catalog-list a').first()).toHaveAttribute('href', /\/tr\/rehberler\//);
+  const query = page.getByRole('searchbox', { name: 'Rehberleri filtrele' });
+  await page.getByRole('button', { name: 'Çalışma zamanı', exact: true }).click();
+  await expect(page.locator('#catalog-status')).toHaveText('11 / 26 rehber gösteriliyor.');
+  await query.fill('uprobe kayıtlarını');
+  await expect(page.locator('[data-catalog-item]:visible a').first()).toHaveAttribute('href', /\/tr\/rehberler\/ebpf-ile-olaylar\.html$/);
+  await query.fill('sonucyok999');
+  await expect(page.getByText('Aramanızla eşleşen rehber bulunamadı.')).toBeVisible();
+  await page.getByRole('button', { name: 'Filtreleri temizle' }).click();
+  await expect(page.locator('[data-catalog-item]:visible')).toHaveCount(26);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('zaryob-language'))).toBe('tr');
+  await revealTools(page);
+  await language.click();
+  await page.getByRole('option', { name: 'EN', exact: true }).click();
+  await expect(page.locator('main h1')).toHaveText('Guides');
+  await expect(page).toHaveURL(new URL('rehberler/index.html', baseURL).href);
+});
+
 test('English content and controls ignore a saved Turkish preference', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('zaryob-language', 'tr'));
-  await page.goto('rehberler/assembly-okuma.html?lang=tr');
+  await page.goto('rehberler/assembly-okuma.html');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('article')).toHaveAttribute('lang', 'en');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Preparing to read x86-64 assembly');
-  await expect(page.locator('[data-console-language]')).toHaveCount(0);
+  await expect(page.locator('.console-language .console-dropdown-value')).toHaveText('en');
   await page.keyboard.press('/');
   const dialog = page.getByRole('dialog', { name: 'execmap / search' });
   await dialog.getByRole('searchbox').fill('INLINING');
   await expect(dialog.locator('a[href*="derleme-farklari.html"]')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Copy code' }).first()).toBeVisible();
+});
+
+test('switching a guide preserves its anchor and opens the Turkish text', async ({ page, baseURL }) => {
+  await page.goto('rehberler/elf-dosyadan-bellege.html#program-header-table-segments');
+  await revealTools(page);
+  await page.locator('.console-language .console-dropdown-button').click();
+  await page.getByRole('option', { name: 'TR', exact: true }).click();
+  await expect(page).toHaveURL(new URL('tr/rehberler/elf-dosyadan-bellege.html#program-header-table-segments', baseURL).href);
+  await expect(page.locator('h1')).toHaveText('Dosyadan belleğe ELF');
+  await expect(page.locator('.prose #program-header-table-segments')).toHaveAccessibleName('Program başlığı tablosu: segmentler');
+  await expect(page.getByRole('button', { name: 'Kodu kopyala', exact: true }).first()).toBeVisible();
+});
+
+test('header controls align and the resources catalogue switches to its counterpart', async ({ page, baseURL }, testInfo) => {
+  await page.goto('tr/kaynaklar/index.html');
+  const mobile = testInfo.project.name === 'mobile';
+  // Narrow screens keep search and menu in the bar; the three tools sit together inside the menu.
+  if (mobile) {
+    const bar = await Promise.all(['.console-search-compact', '.console-menu'].map(selector => page.locator(selector).boundingBox()));
+    expect(new Set(bar.map(control => control.y)).size).toBe(1);
+    await revealTools(page);
+  }
+  const tools = page.locator('.console-tools > *');
+  await expect(tools).toHaveCount(3);
+  await expect(page.locator('.console-tools > .console-language')).toBeVisible();
+  const controls = await Promise.all(['.console-search-open', '.console-theme .console-dropdown-button', '.console-language .console-dropdown-button'].map(selector => page.locator(selector).boundingBox()));
+  expect(controls.map(control => control.height)).toEqual([44, 44, 44]);
+  if (!mobile) expect(new Set(controls.map(control => control.y)).size).toBe(1);
+  await page.locator('.console-language .console-dropdown-button').click();
+  await page.getByRole('option', { name: 'EN', exact: true }).click();
+  await expect(page).toHaveURL(new URL('kaynaklar/index.html', baseURL).href);
+  await expect(page.locator('main h1')).toHaveText('Resources');
 });
 
 test('a floating file header keeps the file name readable on narrow screens with large text', async ({ page, context }, testInfo) => {
@@ -224,4 +302,33 @@ test('a floating file header keeps the Copy word when the row has room and lines
   await page.setViewportSize({ width: 390, height: 560 });
   await expect(head).toHaveClass(/code-file--stuck-word/);
   expect((await measure(head)).word).toBe(true);
+});
+
+test('the ABI explorer compares function entry locations and follows the syscall guide', async ({ page }) => {
+  await page.goto('rehberler/index.html');
+  await page.getByRole('button', { name: 'ABI and compatibility', exact: true }).click();
+  await expect(page.locator('[data-catalog-item]:visible')).toHaveCount(2);
+  await page.locator('[data-catalog-item]:visible').getByRole('link', { name: 'Function ABIs and binary compatibility' }).click();
+
+  const explorer = page.locator('[data-abi-explorer]');
+  const convention = explorer.getByRole('combobox', { name: 'Function ABI' });
+  const count = explorer.getByRole('combobox', { name: 'Argument count' });
+  await expect(explorer.getByText('Argument 7 [rsp + 8]', { exact: true })).toBeVisible();
+  await convention.selectOption('windows');
+  await count.selectOption('5');
+  await expect(explorer.getByText('Argument 5 [rsp + 40]', { exact: true })).toBeVisible();
+  await expect(explorer.getByText(/32 bytes of shadow space/)).toBeVisible();
+  await convention.selectOption('aapcs64');
+  await count.selectOption('9');
+  await expect(explorer.getByText('Argument 9 [sp]', { exact: true })).toBeVisible();
+  await count.selectOption('0');
+  await expect(explorer.getByRole('status')).toHaveText('No explicit arguments.');
+  await expect(explorer.getByRole('listitem')).toHaveCount(0);
+  const viewport = await page.evaluate(() => ({ width: innerWidth, content: document.documentElement.scrollWidth }));
+  expect(viewport.content).toBeLessThanOrEqual(viewport.width + 1);
+
+  await page.locator('article').getByRole('link', { name: 'From a function call to a Linux system call' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('From a function call to a Linux system call');
+  await expect(page.getByRole('link', { name: 'Syscall conventions reference' })).toHaveAttribute('href', 'https://zaryob.github.io/syscall/#conventions');
+  await expect(page.getByRole('link', { name: 'Download pread-boundary.c' })).toHaveAttribute('download', 'pread-boundary.c');
 });

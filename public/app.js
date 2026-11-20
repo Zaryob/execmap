@@ -1,8 +1,10 @@
+import { initAbiExplorer } from './abi-explorer.mjs';
 import { normalize, searchPages, excerpt } from './search.mjs';
 
 export function initCatalog(doc = document) {
   const input = doc.getElementById('catalog-query');
   if (!input) return;
+  const tr = doc.documentElement.lang === 'tr';
   const items = [...doc.querySelectorAll('[data-catalog-item]')];
   const buttons = [...doc.querySelectorAll('[data-filter]')];
   const status = doc.getElementById('catalog-status');
@@ -22,7 +24,8 @@ export function initCatalog(doc = document) {
     // The count is visible only while a topic or query narrows the list;
     // after a reset screen readers still hear that every guide is back.
     const active = filter !== 'all' || terms.length > 0;
-    status.textContent = active ? `${count} / ${items.length} guides shown.` : started ? `All ${items.length} guides shown.` : '';
+    if (active) status.textContent = tr ? `${count} / ${items.length} rehber gösteriliyor.` : `${count} / ${items.length} guides shown.`;
+    else if (started) status.textContent = tr ? `${items.length} rehberin tümü gösteriliyor.` : `All ${items.length} guides shown.`;
     status.classList.toggle('console-sr-only', !active);
     started = true;
     empty.hidden = count !== 0;
@@ -43,6 +46,7 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
   const list = doc.getElementById('search-results');
   const status = doc.getElementById('search-status');
   const base = doc.querySelector('meta[name="site-root"]').content;
+  const turkish = doc.documentElement.lang === 'tr';
   let pages = null;
   let pending = null;
   let opener;
@@ -57,30 +61,44 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
     link.href = `${address.pathname}${address.search}${address.hash}`;
     const label = doc.createElement('small');
     label.className = 'result-kind';
-    label.textContent = `${page.kind === 'laboratuvar' ? 'lab' : page.kind === 'rehber' ? 'guide' : 'reference'} / ${page.section}`;
+    const contentLanguage = page.lang === 'tr' ? 'tr' : 'en';
+    link.hreflang = contentLanguage;
+    label.textContent = turkish
+      ? (contentLanguage === 'tr' ? page.section : `${page.turkish?.section ?? 'Kaynak'} · İngilizce içerik`)
+      : `${page.kind === 'laboratuvar' ? 'lab' : page.kind === 'rehber' ? 'guide' : 'reference'} / ${page.section}`;
     const title = doc.createElement('span');
     title.textContent = page.title;
+    title.lang = contentLanguage;
     const detail = doc.createElement('p');
     detail.className = 'result-excerpt';
     detail.textContent = query ? excerpt(page.text, query) : page.description;
+    detail.lang = contentLanguage;
     link.append(label, title, detail); item.append(link); list.append(item);
   }
   function render() {
     list.replaceChildren();
     if (loadError) {
-      status.textContent = 'The search index could not be loaded. Check your connection and try again.';
+      status.textContent = turkish ? 'Arama dizini yüklenemedi. Bağlantınızı kontrol edip yeniden deneyin.' : 'The search index could not be loaded. Check your connection and try again.';
       status.classList.add('search-error');
       const button = doc.createElement('button');
-      button.type = 'button'; button.textContent = 'Try again';
+      button.type = 'button'; button.textContent = turkish ? 'Yeniden dene' : 'Try again';
       button.addEventListener('click', () => { void load(); });
       const item = doc.createElement('li'); item.append(button); list.append(item);
       return;
     }
     status.classList.remove('search-error');
-    if (!pages) { status.textContent = 'Preparing search…'; return; }
+    if (!pages) { status.textContent = turkish ? 'Arama hazırlanıyor…' : 'Preparing search…'; return; }
     const query = input.value.trim();
     const results = query ? searchPages(pages, query) : pages.filter(page => page.kind === 'rehber').slice(0, 6);
-    status.textContent = !query ? 'Guides to get started. Type to search the full text.' : !results.length ? 'No results found. Try a shorter term.' : `${results.length} result${results.length === 1 ? '' : 's'}${results.length === 40 ? ' (first 40)' : ''}. Select a title to open it.`;
+    if (!query) {
+      status.textContent = turkish ? 'Başlangıç rehberleri. Aramak için bir terim yazın.' : 'Guides to get started. Type to search the full text.';
+    } else if (!results.length) {
+      status.textContent = turkish ? 'Sonuç bulunamadı. Daha kısa bir terim deneyin.' : 'No results found. Try a shorter term.';
+    } else {
+      status.textContent = turkish
+        ? (results.length === 40 ? 'İlk 40 sonuç gösteriliyor.' : `${results.length} sonuç bulundu.`)
+        : `${results.length} result${results.length === 1 ? '' : 's'}${results.length === 40 ? ' (first 40)' : ''}. Select a title to open it.`;
+    }
     for (const page of results) addResult(page, query);
   }
   async function load() {
@@ -93,7 +111,7 @@ export function initSearch(doc = document, request = (...args) => fetch(...args)
         if (!response.ok) throw new Error('Search index unavailable');
         const data = await response.json();
         if (!Array.isArray(data) || data.some(page => typeof page.title !== 'string' || typeof page.url !== 'string' || typeof page.text !== 'string')) throw new Error('Invalid search index');
-        pages = data;
+        pages = turkish ? data.map(page => page.turkish?.lang === 'tr' ? page.turkish : page) : data;
       } catch { loadError = true; }
       finally { pending = null; render(); }
     })();
@@ -171,6 +189,7 @@ export function initReading(doc = document) {
 // Long code blocks start folded to their first lines; without JavaScript,
 // in search highlights and in print they stay complete.
 export function initCodeBlocks(doc = document, search = doc.defaultView?.location?.search || '') {
+  const tr = doc.documentElement.lang === 'tr';
   const terms = (new URLSearchParams(search).get('highlight') || '').toLowerCase().split(/\s+/).filter(Boolean);
   doc.querySelectorAll('.code-block[data-code-fold]').forEach((block, index) => {
     const pre = block.querySelector('pre');
@@ -184,7 +203,7 @@ export function initCodeBlocks(doc = document, search = doc.defaultView?.locatio
     const render = folded => {
       block.classList.toggle('is-folded', folded);
       button.setAttribute('aria-expanded', String(!folded));
-      button.textContent = folded ? `Show all ${lines} lines ↓` : 'Collapse ↑';
+      button.textContent = folded ? (tr ? `${lines} satırın tamamını göster ↓` : `Show all ${lines} lines ↓`) : (tr ? 'Daralt ↑' : 'Collapse ↑');
     };
     button.addEventListener('click', () => {
       const folding = !block.classList.contains('is-folded');
@@ -334,7 +353,7 @@ export function initStuckCodeHeads(doc = document) {
 
 export function boot(doc = document) {
   doc.querySelectorAll('[data-js-only]').forEach(element => { element.hidden = false; });
-  initCatalog(doc); initSearch(doc); initReading(doc); initCodeBlocks(doc); initStuckCodeHeads(doc);
+  initCatalog(doc); initSearch(doc); initReading(doc); initCodeBlocks(doc); initStuckCodeHeads(doc); initAbiExplorer(doc);
 }
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => boot(), { once: true });

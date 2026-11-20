@@ -184,12 +184,14 @@ doğrulanmalıdır; site testleri bu yeteneklerin çalıştığını kanıtlamaz
 
 Proje kaydı kararlı `/execmap/` yollarını ve on bir laboratuvarlık kataloğu korur.
 Kayıttaki görünen adlar, varsa `title_en` değerini kullanır. Üretilen iki arama dizini de
-assembly rehberi ve iki GDB laboratuvarı dahil 35 okuma sayfası içerir. Ortak
-bağdaştırıcı `search.json`; `type: "execmap/"`, `lang: "en"`, tam metin ve seçilen
+assembly rehberi ve iki GDB laboratuvarı dahil tüm okuma sayfalarını içerir. Ortak
+bağdaştırıcı `search.json`; `type: "execmap/"`, `lang: "en"` ya da `lang: "tr"`, tam metin ve seçilen
 derleme önekini kullanan bağlantılar yayımlar. Tüketiciler bu içerik dili alanını
 korumalıdır. Yerel `search-index.json`, ifade ve kod sorgularını sıralamak için kod ve
-başlık alanlarını da taşır. Türkçe içerik sürümü veya dil seçici yoktur; kayıtlı dil
-tercihleri ve `?lang=tr` İngilizce ürünü değiştirmez.
+başlık alanlarını da taşır. `/execmap/tr/` altında rehber, laboratuvar ve kaynak
+yazılarının Türkçe metinleri bulunur. Dil değiştirirken bağlantı aynı sayfayı ve
+bölümünü açar. Tam metin araması iki dilde çalışır. `content-tr/` altındaki Türkçe
+Markdown dosyaları, İngilizce dosyalardaki kod bloklarını ve indirme adlarını korur.
 
 Etiketi bir dosya adı olan kod bloğu, örneğin ` ```c hotspot.c `, editör
 görünümünde çizilir: dosya sekmesi, kopyalanan metne karışmayan satır numarası
@@ -204,9 +206,9 @@ dizininden bayt bayt aynı kopyalardır; `theme.js` İngilizce yedek metinler i�
 lisans notu yanındaki `ICONS-LICENSE.txt` dosyasını gösterir. Eşitleme ve doğrulamayı
 kardeş `console-theme` deposundan `python3 scripts/sync.py` ve `npm run check` ile yapın.
 Kayıt değiştirilmeden `public/console-projects.json` olarak kopyalanır. Node derlemesi
-paketleme bağdaştırıcısıdır: Jekyll include'ları, dil seçici veya dağıtılan
-tercih/sözlük betikleri olmadan İngilizce işaretleme ve yerel arama üretir. Ortak arama
-tüketicileri bu derlemenin ürettiği `lang: "en"` üst verisini korumalıdır.
+Jekyll şablonları olmadan Türkçe ve İngilizce arayüzü üretir. Sayfanın adresi, metnin ve
+arayüzün dilini belirler. Ortak arama
+tüketicileri bu derlemenin ürettiği `lang` üst verisini korumalıdır.
 
 ## Depo düzeni
 

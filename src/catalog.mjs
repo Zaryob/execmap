@@ -2,6 +2,7 @@ export const sections = [
   { name: 'ELF and loading', key: 'elf', label: '01', pages: ['elf-dosyadan-bellege', 'elf-parser-ve-adresler', 'linker-duzeni', 'baslangic-ve-auxv', 'dinamik-baglama'] },
   { name: 'Reverse engineering', key: 're', label: '02', pages: ['assembly-okuma', 'cpp-cagri-zinciri', 'gdb-uzak-hedef', 'stripped-elf', 'ikili-fark-analizi', 'ozel-yukleyiciler', 'paketli-elf', 'core-ve-snapshot'] },
   { name: 'Runtime', key: 'tracing', label: '03', pages: ['performans-analizine-giris', 'process-thread-ve-zamanlayici', 'perf-ile-yurutme', 'bpftrace-temelleri', 'ebpf-ile-olaylar', 'debug-is-akisi', 'calisma-zamani-gecikmesi', 'zamanlayici-izleri', 'izleme-donmalari', 'analiz-aracinin-etkisi', 'izleri-yorumlamak'] },
+  { name: 'ABI and compatibility', key: 'abi', label: '04', pages: ['abi', 'syscall-boundary'] },
 ];
 export const labOrder = ['gdb-ilk-inceleme', 'dallanma-ve-pointer', 'bellek-izinleri', 'sembol-secimi', 'debug-bilgisi', 'derleme-farklari', 'cpu-profili', 'bpftrace-ilk-adimlar', 'yavas-program-teshisi', 'zamanlama-ve-bekleme', 'olay-akisini-eslestirme', 'thread-sayaclari', 'fonksiyon-problari', 'zamanlayici-zaman-cizelgesi'];
 export const summaries = {
@@ -45,7 +46,25 @@ export const summaries = {
   'thread-sayaclari': 'Read procfs files directly, check task identity, and subtract thread counters yourself in Bash.',
 };
 export const routes = [
-  { n: '01', title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.', pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/linker-duzeni', 'rehberler/baslangic-ve-auxv', 'rehberler/dinamik-baglama'], code: 'readelf -lW ./ornek' },
-  { n: '02', title: 'From names to behavior', text: 'Understand stripped files and meaningful differences between versions.', pages: ['rehberler/cpp-cagri-zinciri', 'rehberler/stripped-elf', 'rehberler/ikili-fark-analizi', 'rehberler/ozel-yukleyiciler', 'rehberler/paketli-elf', 'rehberler/core-ve-snapshot'], code: 'objdump -d ./ornek' },
-  { n: '03', title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.', pages: ['rehberler/performans-analizine-giris', 'rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/bpftrace-temelleri', 'rehberler/ebpf-ile-olaylar', 'rehberler/debug-is-akisi', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/zamanlayici-izleri', 'rehberler/izleme-donmalari', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'], code: 'perf record -g -- ./ornek' },
+  {
+    n: '01',
+    en: { title: 'From file to memory', text: 'Read ELF structures, match addresses, and follow the loader.' },
+    tr: { title: 'Dosyadan belleğe', text: 'ELF yapılarını okuyun, adresleri eşleştirin ve yükleme sürecini izleyin.' },
+    pages: ['rehberler/elf-dosyadan-bellege', 'rehberler/elf-parser-ve-adresler', 'rehberler/linker-duzeni', 'rehberler/baslangic-ve-auxv', 'rehberler/dinamik-baglama'],
+    code: 'readelf -lW ./ornek',
+  },
+  {
+    n: '02',
+    en: { title: 'From names to behavior', text: 'Understand stripped files and meaningful differences between versions.' },
+    tr: { title: 'Adlardan davranışa', text: 'Sembolleri ayıklanmış dosyaları okuyun ve sürümler arasındaki önemli farkları bulun.' },
+    pages: ['rehberler/cpp-cagri-zinciri', 'rehberler/stripped-elf', 'rehberler/ikili-fark-analizi', 'rehberler/ozel-yukleyiciler', 'rehberler/paketli-elf', 'rehberler/core-ve-snapshot'],
+    code: 'objdump -d ./ornek',
+  },
+  {
+    n: '03',
+    en: { title: 'Observe runtime', text: 'Test findings with task context, perf samples, and eBPF events.' },
+    tr: { title: 'Çalışma zamanını gözlemleme', text: 'Bulgularınızı görev durumu, perf örnekleri ve eBPF olaylarıyla sınayın.' },
+    pages: ['rehberler/performans-analizine-giris', 'rehberler/process-thread-ve-zamanlayici', 'rehberler/perf-ile-yurutme', 'rehberler/bpftrace-temelleri', 'rehberler/ebpf-ile-olaylar', 'rehberler/debug-is-akisi', 'rehberler/calisma-zamani-gecikmesi', 'rehberler/zamanlayici-izleri', 'rehberler/izleme-donmalari', 'rehberler/analiz-aracinin-etkisi', 'rehberler/izleri-yorumlamak'],
+    code: 'perf record -g -- ./ornek',
+  },
 ];

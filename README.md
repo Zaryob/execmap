@@ -182,13 +182,16 @@ site checks do not establish those capabilities.
 
 The project registry retains stable `/execmap/` paths and the eleven-laboratory
 catalog. Registry display names use `title_en` when available. Both generated
-search indexes contain 35 reading pages, including the assembly guide and two
+search indexes contain reading pages, including the assembly guide and two
 GDB laboratories. The suite adapter `search.json` publishes `type: "execmap/"`,
-`lang: "en"`, full text, and links using the selected build prefix. Consumers
+`lang: "en"` or `lang: "tr"`, full text, and links using the selected build prefix. Consumers
 should preserve that content-language field. The local `search-index.json`
 also carries code and heading fields for ranking phrase and code queries.
-There is no Turkish content variant or language selector; saved language
-preferences and `?lang=tr` leave the English product intact.
+The Turkish edition lives under `/execmap/tr/`. It includes the full guides,
+labs and reference pages. Each article links to its counterpart and preserves
+the section fragment on a language change. Both languages have full-text search.
+The Markdown in `content-tr/` keeps the code blocks and download filenames from
+the original English Markdown.
 
 A code fence whose label is a file name, such as ` ```c hotspot.c `, renders as
 an editor-style block: a file tab, a line-number gutter kept outside the
@@ -204,9 +207,9 @@ license notice references its bundled sibling `ICONS-LICENSE.txt`. Sync and
 verify from the sibling `console-theme` repository with `python3 scripts/sync.py`
 and `npm run check`. The registry is copied unchanged to
 `public/console-projects.json`. The Node build is the packaging adapter: it
-renders English markup/local search without Jekyll includes, a language
-selector, or loading the distributed preference/vocabulary scripts. Shared
-search consumers must retain the `lang: "en"` metadata emitted by this build.
+renders localized markup and search without Jekyll includes. The URL sets the language of
+the reading interface and content. Shared
+search consumers must retain the `lang` metadata emitted by this build.
 
 ## Repository layout
 

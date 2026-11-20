@@ -5,15 +5,15 @@ import { readFile } from 'node:fs/promises';
 import { parseHTML } from 'linkedom';
 const theme = await readFile('public/assets/console/theme.js', 'utf8');
 
-test('English pages do not load preference-driven language adapters', async () => {
+test('a bilingual article serves English markup and an explicit Turkish edition', async () => {
   const { document } = parseHTML(await readFile('_site/rehberler/elf-dosyadan-bellege.html', 'utf8'));
   assert.equal(document.documentElement.lang, 'en');
   assert.equal(document.querySelector('main').lang, 'en');
   assert.equal(document.querySelector('article').lang, 'en');
-  assert.equal(document.querySelector('[data-console-language]'), null);
+  assert.equal(document.querySelector('.console-header [data-console-language] option[selected]').value, 'en');
   assert.equal(document.querySelector('.console-language-note'), null);
-  const scripts = [...document.querySelectorAll('script[src]')].map(node => node.getAttribute('src'));
-  assert.ok(!scripts.some(src => /(?:language|i18n)\.js$/.test(src)));
+  assert.equal(document.documentElement.dataset.routeLanguage, 'en');
+  assert.match(document.querySelector('link[hreflang="tr"]').href, /\/tr\/rehberler\/elf-dosyadan-bellege\.html$/);
 });
 
 test('shared console theme persists choice, toggles compact menu and copies code', async () => {

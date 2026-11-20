@@ -10,22 +10,54 @@ const root = path.resolve('_site');
 const { document: homeDocument } = parseHTML(await readFile(path.join(root, 'index.html'), 'utf8'));
 const base = homeDocument.querySelector('meta[name="site-root"]').content.replace(/\/$/, '');
 const pages = await loadPages(path.resolve('content'));
+const translations = await loadPages(path.resolve('content-tr'), { language: 'tr' });
 const index = JSON.parse(await readFile(path.join(root, 'search-index.json'), 'utf8'));
 async function walk(dir) {
   return (await Promise.all((await readdir(dir, { withFileTypes: true })).map(entry => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]))).flat();
 }
 const htmlFiles = (await walk(root)).filter(file => file.endsWith('.html'));
 
+test('home, catalogues and the error page use the same structure and link to matching editions', async () => {
+  const structure = doc => [...doc.querySelectorAll('main, main *')].map(node => [
+    node.localName,
+    node.id,
+    node.getAttribute('class'),
+    node.getAttribute('data-filter'),
+    node.getAttribute('data-group'),
+    node.getAttribute('href')?.replace(`${base}/tr/`, `${base}/`),
+  ]);
+  for (const route of ['index.html', 'rehberler/index.html', 'laboratuvarlar/index.html', 'kaynaklar/index.html', '404.html']) {
+    const { document: en } = parseHTML(await readFile(path.join(root, route), 'utf8'));
+    const { document: tr } = parseHTML(await readFile(path.join(root, 'tr', route), 'utf8'));
+    assert.deepEqual(structure(tr), structure(en), route);
+    for (const link of tr.querySelectorAll('main a[href]')) {
+      assert.ok(link.getAttribute('href').startsWith(`${base}/tr/`), `${route}: ${link.href}`);
+    }
+  }
+});
+
 test('all content is published with one title, a main landmark and navigation', async () => {
-  assert.equal(pages.length, 42);
-  assert.equal(htmlFiles.length, 47);
+  assert.equal(pages.length, 44);
+  assert.equal(htmlFiles.length, 98);
   for (const file of htmlFiles) {
     const { document } = parseHTML(await readFile(file, 'utf8'));
-    assert.equal(document.documentElement.lang, path.relative(root, file) === 'tr/index.html' ? 'tr' : 'en', file);
+    assert.equal(document.documentElement.lang, path.relative(root, file).startsWith(`tr${path.sep}`) ? 'tr' : 'en', file);
     assert.equal(document.querySelectorAll('h1').length, 1, file);
     assert.equal(document.querySelectorAll('main').length, 1, file);
     assert.ok(document.querySelector('#main'), file);
     assert.ok(document.querySelector('#console-navigation'), file);
+    const localePath = document.documentElement.lang === 'tr' ? `${base}/tr/` : `${base}/`;
+    assert.deepEqual(
+      [...document.querySelectorAll('.suite-footer nav[aria-label="execmap"] a')].map(link => link.getAttribute('href')),
+      [localePath, `${localePath}kaynaklar/index.html`, `${localePath}lisanslar.html`],
+      file,
+    );
+    const languageOptions = document.querySelectorAll('.console-header [data-console-language] option');
+    assert.deepEqual([...languageOptions].map(option => option.value), ['tr', 'en'], file);
+    assert.equal([...languageOptions].find(option => option.hasAttribute('selected')).value, document.documentElement.lang, file);
+    for (const language of ['en', 'tr']) {
+      assert.ok(document.querySelector(`link[hreflang="${language}"][data-language-route]`), file);
+    }
     assert.ok(document.querySelector('title').textContent.includes('execmap'), file);
     assert.ok(document.querySelector('meta[name="description"]').content.length > 20, file);
     if (path.basename(file) === '404.html') {
@@ -48,6 +80,22 @@ test('all content is published with one title, a main landmark and navigation', 
     await access(path.join(root, 'social-card.png'));
     const ids = [...document.querySelectorAll('[id]')].map(node => node.id);
     assert.equal(new Set(ids).size, ids.length, `Duplicate IDs: ${file}`);
+  }
+});
+
+test('every Turkish reading page preserves the source anchors and runnable examples', async () => {
+  const original = pages.filter(page => page.id !== 'index');
+  assert.deepEqual(translations.map(page => page.id), original.map(page => page.id));
+  for (const [position, source] of original.entries()) {
+    const { document: en } = parseHTML(await readFile(path.join(root, `${source.id}.html`), 'utf8'));
+    const { document: tr } = parseHTML(await readFile(path.join(root, `tr/${source.id}.html`), 'utf8'));
+    const headings = doc => [...doc.querySelectorAll('.prose :is(h2, h3, h4, h5, h6)')].map(node => [node.tagName, node.id]);
+    const code = doc => [...doc.querySelectorAll('.prose pre code')].map(node => [node.className, node.textContent]);
+    assert.deepEqual(headings(tr), headings(en), source.id);
+    assert.deepEqual(code(tr), code(en), source.id);
+    assert.notEqual(translations[position].title, source.title, source.id);
+    assert.equal(tr.querySelector('article').lang, 'tr');
+    assert.equal(tr.querySelector('link[hreflang="en"]').href, `https://zaryob.github.io${base}/${source.id}.html`);
   }
 });
 
@@ -98,8 +146,8 @@ test('runtime downloads match the tested sources and include no local outputs', 
   assert.ok(document.querySelector('a[href$="/thread-sayaclari.html"]').textContent.includes('Bash / Linux'));
 });
 
-test('all 35 reading pages are searchable, including code and cited resources', () => {
-  assert.equal(index.length, 41);
+test('all reading pages are searchable, including code and cited resources', () => {
+  assert.equal(index.length, 43);
   for (const page of pages.filter(page => page.id !== 'index')) {
     const hit = index.find(entry => entry.title === page.title);
     assert.ok(hit, page.id);
@@ -114,17 +162,22 @@ test('all 35 reading pages are searchable, including code and cited resources', 
   assert.ok(searchPages(index, 'TraceBuffer').some(page => page.url.includes('olay-akisini-eslestirme')));
   assert.ok(searchPages(index, 'schedstat').some(page => page.url.includes('thread-sayaclari')));
   assert.ok(searchPages(index, 'Worker::process').some(page => page.url.includes('cpp-cagri-zinciri')));
+  assert.ok(searchPages(index, 'shadow space').some(page => page.url === `${base}/rehberler/abi.html`));
+  assert.ok(searchPages(index, 'pread64').some(page => page.url === `${base}/rehberler/syscall-boundary.html`));
   assert.equal(searchPages(index, 'birbiriyleeslesmeyenhayaliterim').length, 0);
 });
 
 test('the suite search adapter exposes full text, content language and baseurl links', async () => {
   const shared = JSON.parse(await readFile(path.join(root, 'search.json'), 'utf8'));
-  assert.equal(shared.length, index.length);
+  assert.equal(shared.length, index.length * 2);
   for (const record of shared) {
     assert.equal(record.type, 'execmap/');
-    assert.equal(record.lang, 'en');
     assert.ok(record.url.startsWith(`${base}/`));
-    assert.equal(record.text, index.find(page => page.url === record.url).text);
+    const match = record.lang === 'tr'
+      ? index.find(page => page.turkish.url === record.url)?.turkish
+      : index.find(page => page.url === record.url);
+    assert.equal(record.lang, match?.lang);
+    assert.equal(record.text, match?.text);
   }
   assert.ok(shared.some(record => record.text.includes('pyelftools')));
 });
@@ -186,14 +239,15 @@ test('code blocks use highlight.js languages, labelled groups and prompt-free GD
   let gdbBlocks = 0;
   for (const file of htmlFiles) {
     const { document } = parseHTML(await readFile(file, 'utf8'));
+    const label = document.documentElement.lang === 'tr' ? 'kod örneği' : 'code example';
     for (const pre of document.querySelectorAll('.prose pre')) {
       const code = pre.querySelector('code');
       const language = code.className.replace('language-', '');
       assert.ok(hljs.getLanguage(language), `${file}: ${language}`);
       assert.equal(pre.getAttribute('role'), 'group', file);
-      assert.ok(pre.getAttribute('aria-label').endsWith(' code example'), file);
+      assert.ok(pre.getAttribute('aria-label').endsWith(` ${label}`), file);
       assert.ok(!/^\s*\(gdb\)/m.test(code.textContent), `${file}: copyable block contains a (gdb) prompt`);
-      if (pre.getAttribute('aria-label') === 'gdb code example') gdbBlocks += 1;
+      if (pre.getAttribute('aria-label') === `gdb ${label}`) gdbBlocks += 1;
     }
     for (const trail of document.querySelectorAll('.breadcrumbs')) {
       assert.equal(trail.querySelectorAll('[aria-current="page"]').length, 1, file);

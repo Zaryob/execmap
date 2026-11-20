@@ -16,11 +16,11 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   const rows = [...document.querySelectorAll('[data-catalog-item]')];
   const visible = () => rows.filter(row => !row.hidden);
   const status = document.getElementById('catalog-status');
-  assert.equal(visible().length, 24);
+  assert.equal(visible().length, 26);
   assert.equal(status.textContent, '');
   document.querySelector('[data-filter="tracing"]').click();
   assert.equal(visible().length, 11);
-  assert.equal(status.textContent, '11 / 24 guides shown.');
+  assert.equal(status.textContent, '11 / 26 guides shown.');
   assert.equal(status.classList.contains('console-sr-only'), false);
   const input = document.getElementById('catalog-query');
   input.value = 'eBPF'; input.dispatchEvent(new window.Event('input'));
@@ -31,8 +31,8 @@ test('catalog combines topic and query, exposes empty state and resets both', ()
   assert.equal(document.getElementById('catalog-empty').hidden, false);
   document.querySelector('[data-reset-filters]').click();
   assert.equal(input.value, '');
-  assert.equal(visible().length, 24);
-  assert.equal(status.textContent, 'All 24 guides shown.');
+  assert.equal(visible().length, 26);
+  assert.equal(status.textContent, 'All 26 guides shown.');
   assert.equal(status.classList.contains('console-sr-only'), true);
   assert.equal(document.querySelector('[data-filter="all"]').getAttribute('aria-pressed'), 'true');
 });

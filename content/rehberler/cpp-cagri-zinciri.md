@@ -72,6 +72,8 @@ For a remote target, preserve executable/debug identity, target architecture sup
 
 For the full target/workstation workflow, matching artifacts, source and library paths, and CLion/VS Code settings, continue with [remote GDB setup](gdb-uzak-hedef.md).
 
+For a side-by-side member call and C-linkage wrapper, see [Function ABIs and binary compatibility](abi.md#observe-a-c-member-and-a-c-linkage-wrapper).
+
 ## Sources
 
 - [GDB C++ expressions](https://sourceware.org/gdb/current/onlinedocs/gdb.html/C-Plus-Plus-Expressions.html) documents member access and `this`.

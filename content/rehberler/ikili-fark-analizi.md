@@ -71,6 +71,8 @@ Examine disassembly and decompiler pseudocode together. Follow data flow and bou
 
 Run the [compiler differences laboratory](../laboratuvarlar/derleme-farklari.md) to observe build-option effects. Continue with [custom loaders](ozel-yukleyiciler.md) for code loaded dynamically into memory without a conventional on-disk executable path.
 
+Use the [ABI compatibility checks](abi.md#test-an-existing-client-against-another-library-build) to test a replacement shared library with a previously linked client.
+
 ## Sources
 
 - [BioDiff — Hex/Binary Difference Tool (8051Enthusiast)](https://github.com/8051Enthusiast/biodiff)

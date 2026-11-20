@@ -125,6 +125,8 @@ A name containing a slash is interpreted as a path. See [ld.so(8)](https://man7.
 
 Try the [symbol selection laboratory](../laboratuvarlar/sembol-secimi.md) to observe `LD_PRELOAD` changing call targets. Continue with [stripped ELF](stripped-elf.md) for analysis when ordinary symbol and debug information is absent.
 
+Run the [ABI symbol-version experiment](abi.md#test-an-existing-client-against-another-library-build) to observe a loader error with an unchanged function body.
+
 ## Sources
 
 - [MaskRay: All about symbol versioning](https://maskray.me/blog/2020-11-26-all-about-symbol-versioning)
